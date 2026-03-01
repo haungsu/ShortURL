@@ -26,7 +26,6 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 放行所有公开接口
                         .requestMatchers(
-                                "/hello", // 测试接口，测完删
                                 "/api/shortlinks/generate", // 生成短链接（公开）
                                 "/api/short-url/**", // 短链接跳转（公开）
                                 "/static/**" // 静态资源
