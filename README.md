@@ -20,6 +20,8 @@ mysql -u root -p
 
 2. 运行以下代码
 ```sql
+DROP DATABASE IF EXISTS short_url_db;
+
 CREATE DATABASE IF NOT EXISTS short_url_db 
 DEFAULT CHARACTER SET utf8mb4 
 DEFAULT COLLATE utf8mb4_unicode_ci;
@@ -74,13 +76,14 @@ CREATE TABLE t_short_url (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 INSERT INTO t_user (username, password, nickname)
-VALUES ('admin', '123456', 'admin1');
+VALUES ('admin', '$2a$10$7wL3hY6u0e9G5x8z2s7d1a9b8c7v6b5n4m3l2k1j0', 'admin1');
 
 INSERT INTO t_user_role (user_id, role_code) VALUES (1, 'ROLE_ADMIN');
 
 INSERT INTO t_user (username, password, nickname)
-VALUES ('user', '123456', 'user1');
+VALUES ('user', '$2a$10$7wL3hY6u0e9G5x8z2s7d1a9b8c7v6b5n4m3l2k1j0', 'user1');
 
 INSERT INTO t_user_role (user_id, role_code) VALUES (2, 'ROLE_USER');
 ```
 
+以上密码对应明文为 123456
