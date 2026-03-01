@@ -38,8 +38,14 @@
     e.preventDefault(); // 阻止表单默认提交
     const originalUrl = document.getElementById('originalUrl').value;
     try {
-      const response = await fetch('/api/short-url/generate?url=' + encodeURIComponent(originalUrl), {
-        method: 'POST'
+      const response = await fetch('/api/short-url/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          originalUrl: originalUrl
+        })
       });
       if (response.ok) {
         const data = await response.json();
