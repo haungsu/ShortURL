@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -14,12 +15,16 @@ import java.time.LocalDateTime;
  */
 @Data // Lombok注解，自动生成get/set/toString等方法
 @TableName("t_short_url") // MyBatis-Plus注解，指定数据库表名
+@Entity // JPA注解，标记为实体类
+@Table(name = "t_short_url") // JPA注解，指定数据库表名
 public class ShortUrl {
 
     /**
      * 主键ID
      */
-    @TableId(type = IdType.AUTO) // 主键自增
+    @TableId(type = IdType.AUTO) // MyBatis-Plus主键注解
+    @Id // JPA主键注解
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // JPA自增策略
     private Long id;
 
     /**
@@ -40,6 +45,7 @@ public class ShortUrl {
     /**
      * 状态（ENABLED/DISABLED）
      */
+    @Enumerated(EnumType.STRING) // JPA枚举映射
     private ShortUrlStatus status;
 
     /**
@@ -71,5 +77,6 @@ public class ShortUrl {
      * 关联创建用户ID（外键）
      */
     @TableField(value = "create_user_id")
+    @Column(name = "create_user_id") // JPA列名映射
     private Long createUserId;
 }
