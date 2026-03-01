@@ -1,6 +1,7 @@
 package com.example.shorturlpro.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -65,4 +66,10 @@ public class ShortUrl {
      * 更新时间
      */
     private LocalDateTime updatedAt;
+
+    /**
+     * 关联创建用户ID（外键）
+     */
+    @TableField(value = "create_user_id")
+    private Long createUserId;
 }
