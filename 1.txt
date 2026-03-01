@@ -33,7 +33,6 @@ React
 3
 4
 5
-6
 # 
 创建⼯程（按提⽰选择：
 Vue3 + TypeScript + Router + Pinia
