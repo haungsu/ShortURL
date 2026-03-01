@@ -29,7 +29,7 @@ public class ShortUrlService {
 
     // Base62字符集：数字0-9 + 小写字母a-z + 大写字母A-Z
     private static final String BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    private static final int CODE_LENGTH = 6; // 默认短码长度
+    private static final int CODE_LENGTH = 6; // 短码长度为6位
 
     private final ShortUrlRepository shortUrlRepository;
 
