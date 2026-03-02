@@ -98,9 +98,9 @@
   function updateLoginStatus() {
     const statusEl = document.getElementById('loginStatus');
     const adminLink = document.getElementById('adminLink');
-    
+
     statusEl.innerHTML = `当前用户：${userInfo.username}，角色：${userInfo.role.replace('ROLE_', '')}，昵称：${userInfo.nickname}`;
-    
+
     // 根据角色显示不同的样式和管理后台链接
     if (userInfo.role === 'ROLE_ADMIN') {
       statusEl.className = 'alert alert-primary';
@@ -131,13 +131,14 @@
 
       if (response.ok) {
         const data = await response.json();
-        // 保存Token和用户信息
-        token = data.token;
+        token = data.accessToken;
+        localStorage.setItem('refreshToken', data.refreshToken);
         userInfo = {
           username: data.username,
           role: data.role,
           nickname: data.nickname
         };
+        // 存储Token到本地
         localStorage.setItem('jwtToken', token);
         // 更新状态
         updateLoginStatus();
@@ -179,7 +180,8 @@
     const headers = {
       'Content-Type': 'application/json'
     };
-    if (token) {
+    // ========== 关键修改2：增加Token非空校验，避免携带undefined ==========
+    if (token && token !== 'undefined') {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
