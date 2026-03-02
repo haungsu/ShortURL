@@ -11,6 +11,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * JWT工具类（适配JJWT 0.11.5版本，修复verifyWith/claims方法解析问题）
@@ -21,6 +23,11 @@ public class JwtUtil {
     private final String SECRET_KEY = "short-url-pro-jwt-secret-key-1234567890-abcdefghijklmn";
     // Token过期时间：2小时（7200000毫秒）
     private final long EXPIRATION_TIME = 7200000;
+    // 刷新Token过期时间：7天
+    private final long REFRESH_EXPIRATION_TIME = 604800000;
+    
+    // Token黑名单（实际项目中应该使用Redis存储）
+    private final Set<String> blacklistedTokens = new HashSet<>();
 
     /**
      * 从Token中提取用户名
@@ -100,5 +107,69 @@ public class JwtUtil {
     private SecretKey getSigningKey() {
         // 修复点3：使用Keys.hmacShaKeyFor生成符合要求的SecretKey
         return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+    }
+    
+    /**
+     * 生成刷新Token
+     */
+    public String generateRefreshToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("type", "refresh");
+        return createToken(claims, userDetails.getUsername(), REFRESH_EXPIRATION_TIME);
+    }
+    
+    /**
+     * 创建Token（支持自定义过期时间）
+     */
+    private String createToken(Map<String, Object> claims, String subject, long expirationTime) {
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(subject)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+                .signWith(getSigningKey())
+                .compact();
+    }
+    
+    /**
+     * 验证Token是否在黑名单中
+     */
+    public boolean isTokenBlacklisted(String token) {
+        return blacklistedTokens.contains(token);
+    }
+    
+    /**
+     * 将Token加入黑名单
+     */
+    public void blacklistToken(String token) {
+        blacklistedTokens.add(token);
+    }
+    
+    /**
+     * 清除过期的黑名单Token（简化实现）
+     */
+    public void cleanExpiredBlacklist() {
+        // 实际项目中应该结合Redis的过期机制
+        blacklistedTokens.clear();
+    }
+    
+    /**
+     * 从Token中提取所有声明信息
+     */
+    public Claims getAllClaimsFromToken(String token) {
+        return extractAllClaims(token);
+    }
+    
+    /**
+     * 验证Token类型
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            Claims claims = getAllClaimsFromToken(token);
+            String type = (String) claims.get("type");
+            return "refresh".equals(type);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
