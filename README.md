@@ -76,12 +76,12 @@ CREATE TABLE t_short_url (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 INSERT INTO t_user (username, password, nickname)
-VALUES ('admin', '$2a$10$7wL3hY6u0e9G5x8z2s7d1a9b8c7v6b5n4m3l2k1j0', 'admin1');
+VALUES ('admin', '$2a$10$1hXKhzWk7.USvoddyOFOvOW9YbYJoQ7gEQv1CwPzty0I0Bkrpk63C', 'admin1');
 
 INSERT INTO t_user_role (user_id, role_code) VALUES (1, 'ROLE_ADMIN');
 
 INSERT INTO t_user (username, password, nickname)
-VALUES ('user', '$2a$10$7wL3hY6u0e9G5x8z2s7d1a9b8c7v6b5n4m3l2k1j0', 'user1');
+VALUES ('user', '$2a$10$1hXKhzWk7.USvoddyOFOvOW9YbYJoQ7gEQv1CwPzty0I0Bkrpk63C', 'user1');
 
 INSERT INTO t_user_role (user_id, role_code) VALUES (2, 'ROLE_USER');
 ```

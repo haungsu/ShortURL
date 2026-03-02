@@ -39,29 +39,29 @@ public class ShortUrlService {
     private final Random random = new Random();
 
     /**
-     * 生成短链接
+     * 【重载】生成短链接（关联用户ID）
+     * 适配控制器传递userId的场景
      *
      * @param request 生成请求参数
+     * @param userId  创建者用户ID（未登录时为null）
      * @return 生成响应
      */
     @Transactional
-    public ShortUrlGenerateResponse generateShortUrl(ShortUrlGenerateRequest request) {
-        log.info("开始生成短链接，原始链接: {}", request.getOriginalUrl());
+    public ShortUrlGenerateResponse generateShortUrl(ShortUrlGenerateRequest request, Long userId) {
+        log.info("开始生成短链接（关联用户ID: {}），原始链接: {}", userId, request.getOriginalUrl());
 
-        // 输入校验
+        // 输入校验（复用原有逻辑）
         if (request.getOriginalUrl() == null || request.getOriginalUrl().trim().isEmpty()) {
             throw new IllegalArgumentException("原始链接不能为空");
         }
-
-        // URL格式简单校验（可根据需要加强）
         if (!request.getOriginalUrl().matches("^https?://.+")) {
             throw new IllegalArgumentException("原始链接格式不正确，请以http://或https://开头");
         }
 
-        // 生成唯一的短码
+        // 生成唯一的短码（复用原有逻辑）
         String shortCode = generateUniqueShortCode();
 
-        // 构造短链接实体
+        // 构造短链接实体（新增：设置userId）
         ShortUrl shortUrl = new ShortUrl();
         shortUrl.setName(extractNameFromUrl(request.getOriginalUrl()));
         shortUrl.setOriginalUrl(request.getOriginalUrl().trim());
@@ -69,14 +69,15 @@ public class ShortUrlService {
         shortUrl.setStatus(ShortUrlStatus.ENABLED); // 默认启用
         shortUrl.setClickCount(0L);
         shortUrl.setAppId(request.getAppId());
+        shortUrl.setUserId(userId); // 新增：关联创建者用户ID（未登录时为null）
         shortUrl.setCreatedAt(LocalDateTime.now());
         shortUrl.setUpdatedAt(LocalDateTime.now());
 
         // 保存到数据库
         ShortUrl saved = shortUrlRepository.save(shortUrl);
-        log.info("短链接生成成功，短码: {}, ID: {}", shortCode, saved.getId());
+        log.info("短链接生成成功（关联用户ID: {}），短码: {}, ID: {}", userId, shortCode, saved.getId());
 
-        // 构造返回结果
+        // 构造返回结果（复用原有逻辑）
         ShortUrlGenerateResponse response = new ShortUrlGenerateResponse();
         response.setShortCode(shortCode);
         response.setShortUrl(appDomain + "/" + shortCode);
@@ -85,10 +86,20 @@ public class ShortUrlService {
     }
 
     /**
-     * 根据短码获取原始链接并增加点击次数
+     * 【原有】生成短链接（无用户ID）
+     * 保持兼容，供无需关联用户的场景调用
      *
-     * @param shortCode 短码
-     * @return 原始链接
+     * @param request 生成请求参数
+     * @return 生成响应
+     */
+    @Transactional
+    public ShortUrlGenerateResponse generateShortUrl(ShortUrlGenerateRequest request) {
+        // 调用重载方法，userId传null（未关联用户）
+        return generateShortUrl(request, null);
+    }
+
+    /**
+     * 根据短码获取原始链接并增加点击次数
      */
     @Cacheable(value = "shortUrl", key = "#shortCode")
     public String getOriginalUrlAndIncrement(String shortCode) {
@@ -101,20 +112,16 @@ public class ShortUrlService {
         }
 
         ShortUrl shortUrl = optional.get();
-
-        // 检查状态
         if (shortUrl.getStatus() != ShortUrlStatus.ENABLED) {
             log.warn("短链接已被禁用，短码: {}", shortCode);
             throw new RuntimeException("短链接已被禁用");
         }
-
-        // 检查是否过期
         if (shortUrl.getExpiresAt() != null && shortUrl.getExpiresAt().isBefore(LocalDateTime.now())) {
             log.warn("短链接已过期，短码: {}", shortCode);
             throw new RuntimeException("短链接已过期");
         }
 
-        // 异步增加点击次数（避免影响跳转性能）
+        // 异步增加点击次数
         incrementClickCountAsync(shortUrl.getId());
 
         log.info("短链接跳转成功，短码: {}, 原始链接: {}", shortCode, shortUrl.getOriginalUrl());
@@ -123,8 +130,6 @@ public class ShortUrlService {
 
     /**
      * 异步增加点击次数
-     *
-     * @param id 短链接ID
      */
     private void incrementClickCountAsync(Long id) {
         new Thread(() -> {
@@ -138,8 +143,6 @@ public class ShortUrlService {
 
     /**
      * 生成唯一的短码
-     *
-     * @return 唯一短码
      */
     private String generateUniqueShortCode() {
         int maxAttempts = 10; // 最大尝试次数
@@ -155,8 +158,6 @@ public class ShortUrlService {
 
     /**
      * 生成随机短码（Base62编码）
-     *
-     * @return 随机短码
      */
     private String generateRandomCode() {
         StringBuilder sb = new StringBuilder();
@@ -168,10 +169,7 @@ public class ShortUrlService {
     }
 
     /**
-     * 从URL中提取名称（用于短链接显示）
-     *
-     * @param url 原始URL
-     * @return 名称
+     * 从URL中提取名称
      */
     private String extractNameFromUrl(String url) {
         try {
@@ -184,9 +182,6 @@ public class ShortUrlService {
 
     /**
      * 根据短码查询短链接详情（带缓存）
-     *
-     * @param shortCode 短码
-     * @return 短链接对象
      */
     @Cacheable(value = "shortUrlDetail", key = "#shortCode")
     public Optional<ShortUrl> findByShortCode(String shortCode) {
@@ -194,9 +189,7 @@ public class ShortUrlService {
     }
 
     /**
-     * 清除缓存（当短链接状态变更时调用）
-     *
-     * @param shortCode 短码
+     * 清除缓存
      */
     @CacheEvict(value = {"shortUrl", "shortUrlDetail"}, key = "#shortCode")
     public void clearCache(String shortCode) {

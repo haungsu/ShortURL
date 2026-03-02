@@ -1,82 +1,85 @@
 package com.example.shorturlpro.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
 import jakarta.persistence.*;
 import lombok.Data;
-
 import java.time.LocalDateTime;
 
 /**
- * 短链接实体类
- * 对应数据库表t_short_url
+ * 短链接实体类（补充userId字段）
+ * 映射数据库t_short_url表
  */
-@Data // Lombok注解，自动生成get/set/toString等方法
-@TableName("t_short_url") // MyBatis-Plus注解，指定数据库表名
-@Entity // JPA注解，标记为实体类
-@Table(name = "t_short_url") // JPA注解，指定数据库表名
+@Data
+@Entity
+@Table(name = "t_short_url")
 public class ShortUrl {
 
     /**
      * 主键ID
      */
-    @TableId(type = IdType.AUTO) // MyBatis-Plus主键注解
-    @Id // JPA主键注解
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // JPA自增策略
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /**
-     * 短链接名称
+     * 短链接名称（用于展示）
      */
+    @Column(name = "name", nullable = false)
     private String name;
 
     /**
      * 原始长链接
      */
+    @Column(name = "original_url", nullable = false, length = 2000)
     private String originalUrl;
 
     /**
-     * 短码（全局唯一）
+     * 短码（6位Base62）
      */
+    @Column(name = "short_code", nullable = false, unique = true, length = 10)
     private String shortCode;
 
     /**
      * 状态（ENABLED/DISABLED）
      */
-    @Enumerated(EnumType.STRING) // JPA枚举映射
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
     private ShortUrlStatus status;
 
     /**
      * 点击次数
      */
+    @Column(name = "click_count", nullable = false)
     private Long clickCount;
 
     /**
-     * 应用标识
+     * 应用ID（扩展字段）
      */
+    @Column(name = "app_id")
     private String appId;
 
     /**
-     * 过期时间（NULL表示永久）
+     * 新增：创建者用户ID（关联t_user表）
+     * 未登录用户生成的短链接，该字段为NULL
      */
+    @Column(name = "user_id")
+    private Long userId;
+
+    /**
+     * 过期时间（NULL表示永久有效）
+     */
+    @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
     /**
      * 创建时间
      */
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     /**
      * 更新时间
      */
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    /**
-     * 关联创建用户ID（外键）
-     */
-    @TableField(value = "create_user_id")
-    @Column(name = "create_user_id") // JPA列名映射
-    private Long createUserId;
 }

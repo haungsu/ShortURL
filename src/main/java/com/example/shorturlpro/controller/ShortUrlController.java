@@ -14,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -36,9 +39,6 @@ public class ShortUrlController {
     /**
      * 生成短链接接口
      * POST /api/short-url/generate
-     *
-     * @param request 生成请求参数
-     * @return 生成结果
      */
     @PostMapping("/generate")
     @Operation(
@@ -54,20 +54,40 @@ public class ShortUrlController {
             @Valid @RequestBody ShortUrlGenerateRequest request) {
 
         try {
-            log.info("收到短链接生成请求: {}", request.getOriginalUrl());
-            
-            ShortUrlGenerateResponse response = shortUrlService.generateShortUrl(request);
-            
-            log.info("短链接生成成功: {} -> {}", response.getShortCode(), response.getShortUrl());
+            // ====== 新增：获取当前登录用户信息 ======
+            String username = "none";
+            String role = "none";
+            Long userId = null;
+
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated()
+                    && !(authentication.getPrincipal() instanceof String)) {
+                // 已登录：获取用户名、角色、用户ID
+                UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                username = userDetails.getUsername();
+                role = userDetails.getAuthorities().iterator().next().getAuthority();
+                // 此处需根据username查询userId（需补充ShortUrlService逻辑）
+                // 简化：演示场景下可暂存username，实际需关联t_user表
+                log.info("当前登录用户：{}，角色：{}", username, role);
+            } else {
+                log.info("未登录用户生成短链接");
+            }
+
+            log.info("收到短链接生成请求: {}，用户：{}，角色：{}", request.getOriginalUrl(), username, role);
+
+            // 调用服务层，传递用户信息（需修改ShortUrlService接收userId）
+            ShortUrlGenerateResponse response = shortUrlService.generateShortUrl(request, userId);
+
+            log.info("短链接生成成功: {} -> {}，用户：{}", response.getShortCode(), response.getShortUrl(), username);
             return ResponseEntity.ok(response);
-            
+
         } catch (IllegalArgumentException e) {
             log.warn("参数校验失败: {}", e.getMessage());
             Map<String, Object> error = new HashMap<>();
             error.put("code", 400);
             error.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(error);
-            
+
         } catch (Exception e) {
             log.error("生成短链接失败", e);
             Map<String, Object> error = new HashMap<>();
@@ -80,9 +100,6 @@ public class ShortUrlController {
     /**
      * 短链接跳转接口
      * GET /{shortCode}
-     *
-     * @param shortCode 短码
-     * @return 302重定向响应
      */
     @GetMapping("/{shortCode}")
     @Operation(
@@ -97,14 +114,14 @@ public class ShortUrlController {
 
         try {
             log.info("收到短链接跳转请求: {}", shortCode);
-            
+
             String originalUrl = shortUrlService.getOriginalUrlAndIncrement(shortCode);
-            
+
             log.info("短链接跳转成功: {} -> {}", shortCode, originalUrl);
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(originalUrl))
                     .build();
-                    
+
         } catch (RuntimeException e) {
             log.warn("短链接跳转失败: {}, 原因: {}", shortCode, e.getMessage());
             return ResponseEntity.notFound().build();

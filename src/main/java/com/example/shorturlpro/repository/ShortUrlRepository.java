@@ -49,7 +49,7 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
      * @param userId 用户ID
      * @return 短链接列表
      */
-    List<ShortUrl> findByCreateUserId(Long userId);
+    List<ShortUrl> findByUserId(Long userId);
 
     /**
      * 根据状态查询短链接列表
