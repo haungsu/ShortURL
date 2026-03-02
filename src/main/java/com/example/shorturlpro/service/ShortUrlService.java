@@ -100,8 +100,10 @@ public class ShortUrlService {
 
     /**
      * 根据短码获取原始链接并增加点击次数
+     * 改进版本：使用同步事务确保点击次数准确自增
      */
     @Cacheable(value = "shortUrl", key = "#shortCode")
+    @Transactional
     public String getOriginalUrlAndIncrement(String shortCode) {
         log.debug("查询短链接，短码: {}", shortCode);
 
@@ -121,24 +123,26 @@ public class ShortUrlService {
             throw new RuntimeException("短链接已过期");
         }
 
-        // 异步增加点击次数
-        incrementClickCountAsync(shortUrl.getId());
+        // 同步增加点击次数（在同一个事务中）
+        incrementClickCountSync(shortUrl.getId());
 
-        log.info("短链接跳转成功，短码: {}, 原始链接: {}", shortCode, shortUrl.getOriginalUrl());
+        log.info("短链接跳转成功，短码: {}, 原始链接: {}, 当前点击次数: {}", 
+                shortCode, shortUrl.getOriginalUrl(), shortUrl.getClickCount() + 1);
         return shortUrl.getOriginalUrl();
     }
 
     /**
-     * 异步增加点击次数
+     * 同步增加点击次数
+     * 在同一事务中执行，确保数据一致性
      */
-    private void incrementClickCountAsync(Long id) {
-        new Thread(() -> {
-            try {
-                shortUrlRepository.incrementClickCount(id);
-            } catch (Exception e) {
-                log.error("更新点击次数失败，ID: {}", id, e);
-            }
-        }).start();
+    private void incrementClickCountSync(Long id) {
+        try {
+            shortUrlRepository.incrementClickCount(id);
+            log.debug("点击次数自增成功，短链接ID: {}", id);
+        } catch (Exception e) {
+            log.error("更新点击次数失败，ID: {}", id, e);
+            throw new RuntimeException("更新点击统计失败", e);
+        }
     }
 
     /**
