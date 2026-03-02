@@ -55,7 +55,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -83,13 +83,15 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", // OpenAPI文档
                                 "/static/**" // 静态资源
                         ).permitAll()
-                        // 需要认证的接口
+                        // 管理员专属接口
                         .requestMatchers(
-                                "/api/short-url/**", // 短链接管理接口
+                                "/api/short-url/admin/**" // 管理员管理接口
+                        ).hasAuthority("ROLE_ADMIN")
+                        // 需要认证的接口（普通用户可用）
+                        .requestMatchers(
+                                "/api/short-url/**", // 短链接管理接口（除admin外）
                                 "/api/user/**" // 用户相关接口
                         ).authenticated()
-                        // admin接口仅管理员可访问
-                        .requestMatchers("/admin/**").hasAuthority("ROLE_ADMIN")
                         // 其他接口需认证
                         .anyRequest().authenticated()
                 )

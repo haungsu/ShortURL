@@ -15,8 +15,7 @@
                     <h4>管理员登录</h4>
                 </div>
                 <div class="card-body">
-                    <!-- 提交到Spring Security默认登录处理路径 -->
-                    <form action="/login" method="post">
+                    <form id="loginForm">
                         <div class="mb-3">
                             <label for="username" class="form-label">用户名</label>
                             <input type="text" class="form-control" id="username" name="username" required placeholder="admin">
@@ -27,16 +26,62 @@
                         </div>
                         <button type="submit" class="btn btn-primary w-100">登录后台</button>
                     </form>
-                    <div th:if="${param.error}" class="alert alert-danger mt-3">
-                        用户名或密码错误！
-                    </div>
-                    <div th:if="${param.logout}" class="alert alert-success mt-3">
-                        已成功退出登录！
-                    </div>
+                    <div id="errorMessage" class="alert alert-danger mt-3" style="display: none;"></div>
+                    <div id="successMessage" class="alert alert-success mt-3" style="display: none;"></div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorMessage = document.getElementById('errorMessage');
+    const successMessage = document.getElementById('successMessage');
+    
+    // 清除之前的消息
+    errorMessage.style.display = 'none';
+    successMessage.style.display = 'none';
+    
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            // 登录成功，保存token到localStorage
+            localStorage.setItem('jwtToken', data.accessToken);
+            localStorage.setItem('refreshToken', data.refreshToken);
+            localStorage.setItem('username', data.username);
+            localStorage.setItem('role', data.role);
+            localStorage.setItem('nickname', data.nickname);
+            
+            successMessage.textContent = '登录成功，正在跳转...';
+            successMessage.style.display = 'block';
+            
+            // 延迟跳转到管理页面
+            setTimeout(() => {
+                window.location.href = '/admin-manage.html';
+            }, 1000);
+        } else {
+            errorMessage.textContent = data.message || '登录失败';
+            errorMessage.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('登录错误:', error);
+        errorMessage.textContent = '网络错误，请稍后重试';
+        errorMessage.style.display = 'block';
+    }
+});
+</script>
 </body>
 </html>

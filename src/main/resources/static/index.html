@@ -33,6 +33,9 @@
           <div id="loginStatus" class="alert alert-secondary">
             未登录（用户：none，角色：none）
           </div>
+          <div id="adminLink" class="mt-2" style="display: none;">
+            <a href="/admin-manage.html" class="btn btn-primary">进入管理后台</a>
+          </div>
         </div>
       </div>
 
@@ -94,9 +97,21 @@
   // 更新登录状态展示
   function updateLoginStatus() {
     const statusEl = document.getElementById('loginStatus');
+    const adminLink = document.getElementById('adminLink');
+    
     statusEl.innerHTML = `当前用户：${userInfo.username}，角色：${userInfo.role.replace('ROLE_', '')}，昵称：${userInfo.nickname}`;
-    statusEl.className = userInfo.role === 'ROLE_ADMIN' ? 'alert alert-primary' :
-            userInfo.role === 'ROLE_USER' ? 'alert alert-success' : 'alert alert-secondary';
+    
+    // 根据角色显示不同的样式和管理后台链接
+    if (userInfo.role === 'ROLE_ADMIN') {
+      statusEl.className = 'alert alert-primary';
+      adminLink.style.display = 'block';
+    } else if (userInfo.role === 'ROLE_USER') {
+      statusEl.className = 'alert alert-success';
+      adminLink.style.display = 'none';
+    } else {
+      statusEl.className = 'alert alert-secondary';
+      adminLink.style.display = 'none';
+    }
   }
 
   // 登录表单提交
@@ -147,6 +162,10 @@
     token = null;
     userInfo = { username: 'none', role: 'none', nickname: 'none' };
     localStorage.removeItem('jwtToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('username');
+    localStorage.removeItem('role');
+    localStorage.removeItem('nickname');
     updateLoginStatus();
     document.getElementById('logoutBtn').setAttribute('disabled', 'disabled');
   }

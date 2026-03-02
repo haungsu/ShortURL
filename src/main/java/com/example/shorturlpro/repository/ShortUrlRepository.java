@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -60,6 +63,15 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
     List<ShortUrl> findByStatus(ShortUrlStatus status);
 
     /**
+     * 根据状态查询短链接列表（分页）
+     *
+     * @param status 状态
+     * @param pageable 分页参数
+     * @return 短链接分页结果
+     */
+    Page<ShortUrl> findByStatus(ShortUrlStatus status, Pageable pageable);
+
+    /**
      * 查询短码是否存在
      *
      * @param shortCode 短码
@@ -109,4 +121,36 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
      */
     @Query("SELECT s.status, COUNT(s) FROM ShortUrl s GROUP BY s.status")
     List<Object[]> countByStatus();
+
+    /**
+     * 根据短码或原链接模糊查询（分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%")
+    Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContaining(
+            @Param("keyword") String keyword, 
+            Pageable pageable);
+
+    /**
+     * 根据短码或原链接模糊查询（不分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%")
+    List<ShortUrl> findByShortCodeContainingOrOriginalUrlContaining(
+            @Param("keyword") String keyword);
+
+    /**
+     * 根据短码或原链接模糊查询且状态筛选（分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%) AND s.status = :status")
+    Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingAndStatus(
+            @Param("keyword") String keyword, 
+            @Param("status") ShortUrlStatus status, 
+            Pageable pageable);
+
+    /**
+     * 根据短码或原链接模糊查询且状态筛选（不分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%) AND s.status = :status")
+    List<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingAndStatus(
+            @Param("keyword") String keyword, 
+            @Param("status") ShortUrlStatus status);
 }

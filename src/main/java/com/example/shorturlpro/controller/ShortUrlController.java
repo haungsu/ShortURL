@@ -1,7 +1,11 @@
 package com.example.shorturlpro.controller;
 
+import com.example.shorturlpro.dto.ShortUrlCreateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
+import com.example.shorturlpro.entity.ShortUrl;
+import com.example.shorturlpro.entity.ShortUrlStatus;
+import com.example.shorturlpro.repository.ShortUrlRepository;
 import com.example.shorturlpro.service.ShortUrlService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,8 +24,11 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 短链接控制器
@@ -35,6 +42,7 @@ import java.util.Map;
 public class ShortUrlController {
 
     private final ShortUrlService shortUrlService;
+    private final ShortUrlRepository shortUrlRepository;
 
     /**
      * 生成短链接接口
@@ -125,6 +133,203 @@ public class ShortUrlController {
         } catch (RuntimeException e) {
             log.warn("短链接跳转失败: {}, 原因: {}", shortCode, e.getMessage());
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * 获取系统统计信息
+     */
+    @GetMapping("/stats")
+    @Operation(
+            summary = "获取系统统计信息",
+            description = "获取短链接系统的统计信息\n\n**权限要求**：需要认证"
+    )
+    @ApiResponse(responseCode = "200", description = "获取成功",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Map.class)))
+    public ResponseEntity<Map<String, Object>> getStats() {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+            
+            // 总数量
+            stats.put("totalCount", shortUrlRepository.countTotal());
+            
+            // 总点击量
+            stats.put("totalClicks", shortUrlRepository.sumTotalClickCount());
+            
+            // 各状态统计
+            long enabledCount = 0;
+            long disabledCount = 0;
+            List<Object[]> statusCounts = shortUrlRepository.countByStatus();
+            for (Object[] row : statusCounts) {
+                ShortUrlStatus status = (ShortUrlStatus) row[0];
+                Long count = (Long) row[1];
+                if (status == ShortUrlStatus.ENABLED) {
+                    enabledCount = count;
+                } else if (status == ShortUrlStatus.DISABLED) {
+                    disabledCount = count;
+                }
+            }
+            stats.put("enabledCount", enabledCount);
+            stats.put("disabledCount", disabledCount);
+            
+            return ResponseEntity.ok(stats);
+            
+        } catch (Exception e) {
+            log.error("获取统计信息失败", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", "获取统计信息失败：" + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * 更新短链接状态接口
+     */
+    @PatchMapping("/status/{id}")
+    @Operation(
+            summary = "更新短链接状态",
+            description = "更新短链接的状态（启用/禁用）\n\n**权限要求**：需要认证"
+    )
+    @ApiResponse(responseCode = "200", description = "更新成功")
+    public ResponseEntity<?> updateShortUrlStatus(
+            @Parameter(description = "短链接ID") @PathVariable Long id,
+            @Parameter(description = "状态信息") @RequestBody Map<String, String> request) {
+        
+        try {
+            String statusStr = request.get("status");
+            if (statusStr == null) {
+                throw new IllegalArgumentException("状态参数不能为空");
+            }
+            
+            ShortUrlStatus status = ShortUrlStatus.valueOf(statusStr.toUpperCase());
+            
+            log.info("更新短链接状态: id={}, status={}", id, status);
+            
+            // 查找短链接
+            ShortUrl shortUrl = shortUrlRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("短链接不存在，ID: " + id));
+            
+            // 更新状态
+            shortUrl.setStatus(status);
+            shortUrl.setUpdatedAt(LocalDateTime.now());
+            shortUrlRepository.save(shortUrl);
+            
+            // 清除缓存
+            shortUrlService.clearCache(shortUrl.getShortCode());
+            
+            log.info("短链接状态更新成功: id={}, status={}", id, status);
+            return ResponseEntity.ok().build();
+            
+        } catch (IllegalArgumentException e) {
+            log.warn("参数错误: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (RuntimeException e) {
+            log.warn("更新状态失败: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        } catch (Exception e) {
+            log.error("更新状态失败", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("message", "服务器内部错误：" + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * 管理员创建短链接接口
+     * POST /api/short-url
+     */
+    @PostMapping("")
+    @Operation(
+            summary = "管理员创建短链接",
+            description = "管理员手动创建短链接\n\n**权限要求**：需要认证且具有管理员权限"
+    )
+    @ApiResponse(responseCode = "200", description = "创建成功",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = ShortUrlGenerateResponse.class)))
+    @ApiResponse(responseCode = "400", description = "请求参数错误")
+    @ApiResponse(responseCode = "401", description = "未认证")
+    @ApiResponse(responseCode = "403", description = "权限不足")
+    public ResponseEntity<?> createShortUrl(
+            @Valid @RequestBody ShortUrlCreateRequest request) {
+        
+        try {
+            log.info("收到管理员创建短链接请求: {}", request);
+            
+            // 获取当前登录用户信息
+            String username = "unknown";
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.isAuthenticated()
+                    && !(authentication.getPrincipal() instanceof String)) {
+                UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                username = userDetails.getUsername();
+                log.info("当前操作用户: {}", username);
+            }
+            
+            // 构造 ShortUrlGenerateRequest 对象
+            ShortUrlGenerateRequest generateRequest = new ShortUrlGenerateRequest();
+            generateRequest.setOriginalUrl(request.getOriginalUrl());
+            // 注意：ShortUrlGenerateRequest 中没有 shortCode 字段，所以这里不设置
+            
+            // 调用服务层生成短链接
+            ShortUrlGenerateResponse response = shortUrlService.generateShortUrl(generateRequest, null);
+            
+            // 更新数据库中的额外字段
+            Optional<ShortUrl> shortUrlOpt = shortUrlRepository.findByShortCode(response.getShortCode());
+            if (shortUrlOpt.isPresent()) {
+                ShortUrl shortUrl = shortUrlOpt.get();
+                // 设置名称
+                if (request.getName() != null && !request.getName().isEmpty()) {
+                    shortUrl.setName(request.getName());
+                }
+                
+                // 设置自定义短码（如果提供）
+                if (request.getShortCode() != null && !request.getShortCode().isEmpty()) {
+                    shortUrl.setShortCode(request.getShortCode());
+                }
+                
+                // 设置状态
+                if (request.getStatus() != null) {
+                    shortUrl.setStatus(request.getStatus());
+                }
+                
+                // 设置应用ID
+                if (request.getAppId() != null && !request.getAppId().isEmpty()) {
+                    shortUrl.setAppId(request.getAppId());
+                }
+                
+                // 设置过期时间
+                if (request.getExpiresAt() != null) {
+                    shortUrl.setExpiresAt(request.getExpiresAt());
+                }
+                
+                // 设置用户ID（如果有对应的用户）
+                // 这里简化处理，实际应该根据username查询用户ID
+                // shortUrl.setUserId(userId);
+                
+                shortUrlRepository.save(shortUrl);
+            }
+            
+            log.info("管理员创建短链接成功: {} -> {}", response.getShortCode(), response.getShortUrl());
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalArgumentException e) {
+            log.warn("参数校验失败: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("code", 400);
+            error.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+            
+        } catch (Exception e) {
+            log.error("创建短链接失败", e);
+            Map<String, Object> error = new HashMap<>();
+            error.put("code", 500);
+            error.put("message", "服务器内部错误：" + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 

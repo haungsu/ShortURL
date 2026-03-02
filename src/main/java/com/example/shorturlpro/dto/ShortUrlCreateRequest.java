@@ -1,30 +1,37 @@
 package com.example.shorturlpro.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Data;
+import java.time.LocalDateTime;
+import com.example.shorturlpro.entity.ShortUrlStatus;
 
 /**
- * 新增短链接请求DTO
- * 接收前端新增接口的请求参数
+ * 管理员创建短链接请求DTO
+ * 用于管理员界面的手动创建短链接功能
  */
 @Data
 public class ShortUrlCreateRequest {
 
     /**
-     * 短链接名称
-     * 非空，长度2-50位
+     * 短链接名称（用于展示）
      */
-    @NotBlank(message = "短链接名称不能为空")
-    @Size(min = 2, max = 50, message = "短链接名称长度需在2-50位之间")
     private String name;
 
     /**
+     * 自定义短码（可选）
+     */
+    private String shortCode;
+
+    /**
      * 原始长链接
-     * 非空，需符合URL格式（后续可加URL格式校验注解）
      */
     @NotBlank(message = "原始长链接不能为空")
     private String originalUrl;
+
+    /**
+     * 状态（ENABLED/DISABLED）
+     */
+    private ShortUrlStatus status;
 
     /**
      * 应用标识（可选）
@@ -32,7 +39,7 @@ public class ShortUrlCreateRequest {
     private String appId;
 
     /**
-     * 过期时间（可选，格式：yyyy-MM-dd HH:mm:ss）
+     * 过期时间（可选）
      */
-    private String expiresAt;
+    private LocalDateTime expiresAt;
 }

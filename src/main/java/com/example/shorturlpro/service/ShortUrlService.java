@@ -1,5 +1,6 @@
 package com.example.shorturlpro.service;
 
+import com.example.shorturlpro.dto.ShortUrlCreateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
 import com.example.shorturlpro.entity.ShortUrl;
@@ -15,6 +16,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -198,5 +200,114 @@ public class ShortUrlService {
     @CacheEvict(value = {"shortUrl", "shortUrlDetail"}, key = "#shortCode")
     public void clearCache(String shortCode) {
         log.debug("清除短链接缓存，短码: {}", shortCode);
+    }
+
+    /**
+     * 管理员创建短链接
+     */
+    @Transactional
+    public ShortUrl createShortUrlByAdmin(ShortUrlCreateRequest request) {
+        log.info("管理员创建短链接: name={}, originalUrl={}", request.getName(), request.getOriginalUrl());
+
+        // 参数校验
+        if (request.getOriginalUrl() == null || request.getOriginalUrl().trim().isEmpty()) {
+            throw new IllegalArgumentException("原始链接不能为空");
+        }
+        if (!request.getOriginalUrl().matches("^https?://.+")) {
+            throw new IllegalArgumentException("原始链接格式不正确，请以http://或https://开头");
+        }
+
+        // 生成短码
+        String shortCode;
+        if (request.getShortCode() != null && !request.getShortCode().trim().isEmpty()) {
+            // 使用指定的短码
+            shortCode = request.getShortCode().trim();
+            if (shortUrlRepository.existsByShortCode(shortCode)) {
+                throw new IllegalArgumentException("短码已存在: " + shortCode);
+            }
+        } else {
+            // 自动生成短码
+            shortCode = generateUniqueShortCode();
+        }
+
+        // 创建短链接实体
+        ShortUrl shortUrl = new ShortUrl();
+        shortUrl.setName(request.getName());
+        shortUrl.setOriginalUrl(request.getOriginalUrl().trim());
+        shortUrl.setShortCode(shortCode);
+        shortUrl.setStatus(request.getStatus() != null ? request.getStatus() : ShortUrlStatus.ENABLED);
+        shortUrl.setClickCount(0L);
+        shortUrl.setAppId(request.getAppId());
+        shortUrl.setUserId(null); // 管理员创建的链接暂时设为null，后续可扩展
+        shortUrl.setExpiresAt(request.getExpiresAt());
+        shortUrl.setCreatedAt(LocalDateTime.now());
+        shortUrl.setUpdatedAt(LocalDateTime.now());
+
+        ShortUrl saved = shortUrlRepository.save(shortUrl);
+        log.info("管理员创建短链接成功，ID: {}, 短码: {}", saved.getId(), shortCode);
+        
+        return saved;
+    }
+
+    /**
+     * 管理员更新短链接
+     */
+    @Transactional
+    @CacheEvict(value = {"shortUrl", "shortUrlDetail"}, key = "#id")
+    public ShortUrl updateShortUrlByAdmin(Long id, ShortUrlCreateRequest request) {
+        log.info("管理员更新短链接: id={}, name={}", id, request.getName());
+
+        // 查找现有记录
+        ShortUrl existing = shortUrlRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("短链接不存在，ID: " + id));
+
+        // 如果短码被修改，检查新短码是否已存在
+        if (request.getShortCode() != null && !request.getShortCode().equals(existing.getShortCode())) {
+            if (shortUrlRepository.existsByShortCode(request.getShortCode())) {
+                throw new IllegalArgumentException("短码已存在: " + request.getShortCode());
+            }
+            existing.setShortCode(request.getShortCode());
+        }
+
+        // 更新其他字段
+        existing.setName(request.getName());
+        existing.setOriginalUrl(request.getOriginalUrl());
+        existing.setStatus(request.getStatus() != null ? request.getStatus() : existing.getStatus());
+        existing.setAppId(request.getAppId());
+        existing.setExpiresAt(request.getExpiresAt());
+        existing.setUpdatedAt(LocalDateTime.now());
+
+        ShortUrl updated = shortUrlRepository.save(existing);
+        log.info("管理员更新短链接成功，ID: {}", id);
+        
+        return updated;
+    }
+
+    /**
+     * 管理员删除短链接
+     */
+    @Transactional
+    @CacheEvict(value = {"shortUrl", "shortUrlDetail"}, allEntries = true)
+    public void deleteShortUrlByAdmin(Long id) {
+        log.info("管理员删除短链接: id={}", id);
+
+        if (!shortUrlRepository.existsById(id)) {
+            throw new RuntimeException("短链接不存在，ID: " + id);
+        }
+
+        shortUrlRepository.deleteById(id);
+        log.info("管理员删除短链接成功，ID: {}", id);
+    }
+
+    /**
+     * 管理员批量删除短链接
+     */
+    @Transactional
+    @CacheEvict(value = {"shortUrl", "shortUrlDetail"}, allEntries = true)
+    public void batchDeleteShortUrlsByAdmin(List<Long> ids) {
+        log.info("管理员批量删除短链接，IDs: {}", ids);
+        
+        shortUrlRepository.deleteAllById(ids);
+        log.info("管理员批量删除成功，共删除 {} 条记录", ids.size());
     }
 }

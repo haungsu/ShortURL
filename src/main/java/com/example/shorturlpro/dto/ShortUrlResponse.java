@@ -47,6 +47,21 @@ public class ShortUrlResponse {
     private Long clickCount;
 
     /**
+     * 用户ID
+     */
+    private Long userId;
+
+    /**
+     * 应用ID
+     */
+    private String appId;
+
+    /**
+     * 过期时间
+     */
+    private LocalDateTime expiresAt;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;
