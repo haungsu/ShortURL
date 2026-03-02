@@ -37,6 +37,9 @@ public class ShortUrlService {
 
     @Value("${app.domain:http://localhost:8080}")
     private String appDomain;
+    
+    @Value("${app.short-url.default-expire-days:30}")
+    private int defaultExpireDays;
 
     private final Random random = new Random();
 
@@ -72,6 +75,8 @@ public class ShortUrlService {
         shortUrl.setClickCount(0L);
         shortUrl.setAppId(request.getAppId());
         shortUrl.setUserId(userId); // 新增：关联创建者用户ID（未登录时为null）
+        // 设置默认过期时间：30天后
+        shortUrl.setExpiresAt(LocalDateTime.now().plusDays(defaultExpireDays));
         shortUrl.setCreatedAt(LocalDateTime.now());
         shortUrl.setUpdatedAt(LocalDateTime.now());
 
@@ -239,7 +244,12 @@ public class ShortUrlService {
         shortUrl.setClickCount(0L);
         shortUrl.setAppId(request.getAppId());
         shortUrl.setUserId(null); // 管理员创建的链接暂时设为null，后续可扩展
-        shortUrl.setExpiresAt(request.getExpiresAt());
+        // 如果没有指定过期时间，则设置默认过期时间
+        if (request.getExpiresAt() != null) {
+            shortUrl.setExpiresAt(request.getExpiresAt());
+        } else {
+            shortUrl.setExpiresAt(LocalDateTime.now().plusDays(defaultExpireDays));
+        }
         shortUrl.setCreatedAt(LocalDateTime.now());
         shortUrl.setUpdatedAt(LocalDateTime.now());
 
