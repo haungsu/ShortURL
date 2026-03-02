@@ -1,6 +1,7 @@
 package com.example.shorturlpro.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import java.time.LocalDateTime;
 import com.example.shorturlpro.entity.ShortUrlStatus;
@@ -15,11 +16,12 @@ public class ShortUrlCreateRequest {
     /**
      * 短链接名称（用于展示）
      */
-    private String name;
+    private String name = "未命名";
 
     /**
      * 自定义短码（可选）
      */
+    @Pattern(regexp = "^[a-zA-Z0-9]{6,10}$", message = "自定义短码必须是6-10位字母/数字")
     private String shortCode;
 
     /**
@@ -35,8 +37,9 @@ public class ShortUrlCreateRequest {
 
     /**
      * 应用标识（可选）
+     * 默认值：admin（管理员创建）
      */
-    private String appId;
+    private String appId = "admin";
 
     /**
      * 过期时间（可选）

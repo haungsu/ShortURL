@@ -58,10 +58,10 @@ public class ShortUrl {
     private String appId;
 
     /**
-     * 新增：创建者用户ID（关联t_user表）
+     * 创建者用户ID（关联t_user表）
      * 未登录用户生成的短链接，该字段为NULL
      */
-    @Column(name = "user_id")
+    @Column(name = "create_user_id")
     private Long userId;
 
     /**

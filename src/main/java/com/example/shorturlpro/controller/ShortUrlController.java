@@ -5,7 +5,9 @@ import com.example.shorturlpro.dto.ShortUrlGenerateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
 import com.example.shorturlpro.entity.ShortUrl;
 import com.example.shorturlpro.entity.ShortUrlStatus;
+import com.example.shorturlpro.entity.User;
 import com.example.shorturlpro.repository.ShortUrlRepository;
+import com.example.shorturlpro.repository.UserRepository;
 import com.example.shorturlpro.service.ShortUrlService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,6 +45,7 @@ public class ShortUrlController {
 
     private final ShortUrlService shortUrlService;
     private final ShortUrlRepository shortUrlRepository;
+    private final UserRepository userRepository;
 
     /**
      * 生成短链接接口
@@ -62,7 +65,7 @@ public class ShortUrlController {
             @Valid @RequestBody ShortUrlGenerateRequest request) {
 
         try {
-            // ====== 新增：获取当前登录用户信息 ======
+            // 获取当前登录用户信息
             String username = "none";
             String role = "none";
             Long userId = null;
@@ -70,23 +73,30 @@ public class ShortUrlController {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()
                     && !(authentication.getPrincipal() instanceof String)) {
-                // 已登录：获取用户名、角色、用户ID
+                // 已登录：获取用户名、角色
                 UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-                username = userDetails.getUsername();
+                final String loginUsername = userDetails.getUsername(); // 声明为final
+                username = loginUsername; // 赋值给原变量（不影响）
                 role = userDetails.getAuthorities().iterator().next().getAuthority();
-                // 此处需根据username查询userId（需补充ShortUrlService逻辑）
-                // 简化：演示场景下可暂存username，实际需关联t_user表
-                log.info("当前登录用户：{}，角色：{}", username, role);
+
+                // 通过username查询User实体，获取真实userId
+                User loginUser = userRepository.findByUsername(username)
+                        .orElseThrow(() -> new RuntimeException("登录用户不存在：" + loginUsername));
+                userId = loginUser.getId(); // 拿到用户的真实ID
+
+                log.info("当前登录用户：{}（ID：{}），角色：{}", username, userId, role);
             } else {
-                log.info("未登录用户生成短链接");
+                log.info("未登录用户生成短链接（匿名用户）");
             }
 
-            log.info("收到短链接生成请求: {}，用户：{}，角色：{}", request.getOriginalUrl(), username, role);
+            log.info("收到短链接生成请求: {}，用户ID：{}，用户名：{}，角色：{}",
+                    request.getOriginalUrl(), userId, username, role);
 
-            // 调用服务层，传递用户信息（需修改ShortUrlService接收userId）
+            // 传递userId到服务层
             ShortUrlGenerateResponse response = shortUrlService.generateShortUrl(request, userId);
 
-            log.info("短链接生成成功: {} -> {}，用户：{}", response.getShortCode(), response.getShortUrl(), username);
+            log.info("短链接生成成功: {} -> {}，用户ID：{}，用户名：{}",
+                    response.getShortCode(), response.getShortUrl(), userId, username);
             return ResponseEntity.ok(response);
 
         } catch (IllegalArgumentException e) {
@@ -95,6 +105,14 @@ public class ShortUrlController {
             error.put("code", 400);
             error.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(error);
+
+            // 捕获用户不存在的异常
+        } catch (RuntimeException e) {
+            log.warn("用户信息异常: {}", e.getMessage());
+            Map<String, Object> error = new HashMap<>();
+            error.put("code", 401);
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
 
         } catch (Exception e) {
             log.error("生成短链接失败", e);
@@ -306,10 +324,6 @@ public class ShortUrlController {
                 if (request.getExpiresAt() != null) {
                     shortUrl.setExpiresAt(request.getExpiresAt());
                 }
-                
-                // 设置用户ID（如果有对应的用户）
-                // 这里简化处理，实际应该根据username查询用户ID
-                // shortUrl.setUserId(userId);
                 
                 shortUrlRepository.save(shortUrl);
             }
