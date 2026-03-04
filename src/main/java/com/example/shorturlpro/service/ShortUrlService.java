@@ -6,6 +6,7 @@ import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
 import com.example.shorturlpro.entity.ShortUrl;
 import com.example.shorturlpro.entity.ShortUrlStatus;
 import com.example.shorturlpro.repository.ShortUrlRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,17 +34,65 @@ public class ShortUrlService {
 
     // Base62字符集：数字0-9 + 小写字母a-z + 大写字母A-Z
     private static final String BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    private static final int CODE_LENGTH = 6; // 短码长度为6位
+    @Value("${app.short-url.code-length:6}")
+    private int code_length;
 
     private final ShortUrlRepository shortUrlRepository;
 
     @Value("${app.domain:http://localhost:8080}")
-    private String appDomain;
+    private String fallbackAppDomain;
     
     @Value("${app.short-url.default-expire-days:30}")
     private int defaultExpireDays;
 
     private final Random random = new Random();
+
+    /**
+     * 动态获取用户实际访问的域名（适配内网穿透动态域名）
+     * 优先读取反向代理透传的头信息，无则读取原生请求信息，兜底用配置值
+     */
+    private String getDynamicAppDomain() {
+        // 获取当前请求上下文
+        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            log.warn("无请求上下文，使用兜底域名: {}", fallbackAppDomain);
+            return fallbackAppDomain;
+        }
+
+        HttpServletRequest request = attributes.getRequest();
+
+        // 1. 优先读取反向代理/内网穿透透传的真实域名（适配ngrok/FRP等工具）
+        String forwardedHost = request.getHeader("X-Forwarded-Host");
+        String forwardedProto = request.getHeader("X-Forwarded-Proto"); // http/https
+
+        if (forwardedHost != null && forwardedProto != null) {
+            log.debug("读取到X-Forwarded头信息，Host: {}, Proto: {}", forwardedHost, forwardedProto);
+            // 处理X-Forwarded-Host包含端口的情况（比如 xxx.ngrok.io:8080）
+            if (forwardedHost.contains(":")) {
+                return String.format("%s://%s", forwardedProto, forwardedHost);
+            } else {
+                // 无端口时，根据协议自动补默认端口（80/443）
+                int defaultPort = "https".equals(forwardedProto) ? 443 : 80;
+                return defaultPort == 80 || defaultPort == 443
+                        ? String.format("%s://%s", forwardedProto, forwardedHost)
+                        : String.format("%s://%s:%d", forwardedProto, forwardedHost, defaultPort);
+            }
+        }
+
+        // 2. 无反向代理头，读取原生请求信息
+        String scheme = request.getScheme(); // http/https
+        String serverName = request.getServerName(); // 实际访问的域名/IP
+        int serverPort = request.getServerPort(); // 实际访问的端口
+
+        log.debug("读取原生请求信息，Scheme: {}, ServerName: {}, Port: {}", scheme, serverName, serverPort);
+
+        // 拼接完整域名（排除80/443默认端口，避免多余的:80/:443）
+        if (serverPort == 80 || serverPort == 443) {
+            return String.format("%s://%s", scheme, serverName);
+        } else {
+            return String.format("%s://%s:%d", scheme, serverName, serverPort);
+        }
+    }
 
     /**
      * 【重载】生成短链接（关联用户ID）
@@ -87,7 +138,8 @@ public class ShortUrlService {
         // 构造返回结果（复用原有逻辑）
         ShortUrlGenerateResponse response = new ShortUrlGenerateResponse();
         response.setShortCode(shortCode);
-        response.setShortUrl(appDomain + "/" + shortCode);
+        String dynamicDomain = getDynamicAppDomain();
+        response.setShortUrl(dynamicDomain + "/" + shortCode);
 
         return response;
     }
@@ -172,7 +224,7 @@ public class ShortUrlService {
      */
     private String generateRandomCode() {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < CODE_LENGTH; i++) {
+        for (int i = 0; i < code_length; i++) {
             int index = random.nextInt(BASE62.length());
             sb.append(BASE62.charAt(index));
         }
