@@ -39,7 +39,7 @@ public class ShortUrlService {
 
     private final ShortUrlRepository shortUrlRepository;
 
-    @Value("${app.domain:http://localhost:8080}")
+    @Value("${app.short-url.base-url:http://localhost:8080}")
     private String fallbackAppDomain;
     
     @Value("${app.short-url.default-expire-days:30}")
