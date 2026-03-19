@@ -50,3 +50,19 @@ install.sh
 install_skillhub.ps1
 install_skillhub.sh
 latest.tar.gz
+
+### Node.js ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+### Frontend build artifacts ###
+ShortURLPro/vue/dist/
+ShortURLPro/vue/.vite/
+ShortURLPro/vue/coverage/
+
+### OS generated files ###
+Thumbs.db
+.DS_Store

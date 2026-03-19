@@ -1,4 +1,4 @@
-import { api } from './request'
+import { httpClient } from './request'
 
 export interface ShortUrlGenerateRequest {
   originalUrl: string
@@ -8,86 +8,102 @@ export interface ShortUrlGenerateRequest {
 export interface ShortUrlGenerateResponse {
   shortCode: string
   shortUrl: string
+  originalUrl: string
+  expireTime?: string
 }
 
 export interface ShortUrlCreateRequest {
   name: string
   originalUrl: string
-  shortCode?: string
-  status?: 'ENABLED' | 'DISABLED'
-  appId?: string
-  expiresAt?: string
+  status: 'ENABLED' | 'DISABLED'
+  expireTime?: string
 }
 
 export interface ShortUrlResponse {
   id: number
   name: string
-  originalUrl: string
   shortCode: string
+  shortUrl: string
+  originalUrl: string
   status: 'ENABLED' | 'DISABLED'
   clickCount: number
-  appId?: string
-  expiresAt?: string
   createdAt: string
   updatedAt: string
-  userId?: number
+  expireTime?: string
 }
 
-export interface ShortUrlListResponse {
+interface ShortUrlListResponse {
   content: ShortUrlResponse[]
-  totalPages: number
   totalElements: number
+  totalPages: number
   size: number
   number: number
 }
 
 export interface ShortUrlStats {
-  totalCount: number
-  enabledCount: number
-  disabledCount: number
+  totalUrls: number
   totalClicks: number
-}
-
-export interface ShortUrlQueryParams {
-  page?: number
-  size?: number
-  search?: string
-  status?: string
-  sort?: string
+  todayClicks: number
+  activeUrls: number
 }
 
 export const shortUrlApi = {
-  generate: (data: ShortUrlGenerateRequest) => 
-    api.post<ShortUrlGenerateResponse>('/api/short-url/generate', data, { skipAuth: true }),
-  
-  create: (data: ShortUrlCreateRequest) => 
-    api.post<ShortUrlResponse>('/api/short-url', data),
-  
-  update: (id: number, data: ShortUrlCreateRequest) => 
-    api.put<ShortUrlResponse>(`/api/short-url/admin/${id}`, data),
-  
-  delete: (id: number) => 
-    api.delete<void>(`/api/short-url/admin/${id}`),
-  
-  toggleStatus: (id: number, status: 'ENABLED' | 'DISABLED') => 
-    api.patch<void>(`/api/short-url/status/${id}`, { status }),
-  
-  getList: (params: ShortUrlQueryParams = {}) => {
-    const query = new URLSearchParams()
-    if (params.page !== undefined) query.set('page', String(params.page))
-    if (params.size) query.set('size', String(params.size))
-    if (params.search) query.set('search', params.search)
-    if (params.status) query.set('status', params.status)
-    if (params.sort) query.set('sort', params.sort)
-    return api.get<ShortUrlListResponse>(`/api/short-url/admin/list?${query.toString()}`)
+  // 生成短链接（公开接口）
+  generate(data: ShortUrlGenerateRequest): Promise<ShortUrlGenerateResponse> {
+    return httpClient.post<ShortUrlGenerateResponse>('/api/short-url/generate', data)
+      .then(response => response.data)
   },
-  
-  getStats: () => api.get<ShortUrlStats>('/api/short-url/stats'),
-  
-  export: (params: { search?: string; status?: string }) => {
-    const query = new URLSearchParams()
-    if (params.search) query.set('search', params.search)
-    if (params.status) query.set('status', params.status)
-    return api.get<Blob>(`/api/short-url/admin/export?${query.toString()}`)
+
+  // 管理员创建短链接
+  create(data: ShortUrlCreateRequest): Promise<ShortUrlResponse> {
+    return httpClient.post<ShortUrlResponse>('/api/short-url', data)
+      .then(response => response.data)
+  },
+
+  // 获取短链接列表（管理员）
+  getList(params: {
+    page?: number
+    size?: number
+    keyword?: string
+    status?: string
+    sort?: string
+  }): Promise<ShortUrlListResponse> {
+    return httpClient.get<ShortUrlListResponse>('/api/short-url/admin/list', params)
+      .then(response => response.data)
+  },
+
+  // 获取统计信息（管理员）
+  getStats(): Promise<ShortUrlStats> {
+    return httpClient.get<ShortUrlStats>('/api/short-url/admin/stats')
+      .then(response => response.data)
+  },
+
+  // 更新短链接
+  update(id: number, data: Partial<ShortUrlCreateRequest>): Promise<ShortUrlResponse> {
+    return httpClient.put<ShortUrlResponse>(`/api/short-url/${id}`, data)
+      .then(response => response.data)
+  },
+
+  // 删除短链接
+  delete(id: number): Promise<void> {
+    return httpClient.delete<void>(`/api/short-url/${id}`)
+      .then(response => response.data)
+  },
+
+  // 切换短链接状态
+  toggleStatus(id: number, status: 'ENABLED' | 'DISABLED'): Promise<ShortUrlResponse> {
+    return httpClient.patch<ShortUrlResponse>(`/api/short-url/${id}/status`, { status })
+      .then(response => response.data)
+  },
+
+  // 导出数据
+  export(params: {
+    keyword?: string
+    status?: string
+    startTime?: string
+    endTime?: string
+  }): Promise<Blob> {
+    return httpClient.get<Blob>('/api/short-url/admin/export', params)
+      .then(response => new Blob([JSON.stringify(response.data)], { type: 'application/json' }))
   }
 }

@@ -1,60 +1,72 @@
-import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
 
-export interface UserInfo {
+interface UserInfo {
+  id: number
   username: string
   role: string
-  nickname: string
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('jwtToken'))
+  const token = ref<string | null>(localStorage.getItem('token'))
   const refreshToken = ref<string | null>(localStorage.getItem('refreshToken'))
-  const userInfo = ref<UserInfo>({
-    username: localStorage.getItem('username') || '',
-    role: localStorage.getItem('role') || '',
-    nickname: localStorage.getItem('nickname') || ''
-  })
+  const userInfo = ref<UserInfo | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => userInfo.value.role === 'ROLE_ADMIN')
-  const displayRole = computed(() => userInfo.value.role.replace('ROLE_', ''))
-
-  function setAuth(data: { accessToken: string; refreshToken: string; username: string; role: string; nickname: string }) {
-    token.value = data.accessToken
-    refreshToken.value = data.refreshToken
-    userInfo.value = {
-      username: data.username,
-      role: data.role,
-      nickname: data.nickname
+  const isAdmin = computed(() => userInfo.value?.role === 'ROLE_ADMIN')
+  const displayRole = computed(() => {
+    switch (userInfo.value?.role) {
+      case 'ROLE_ADMIN': return '管理员'
+      case 'ROLE_USER': return '普通用户'
+      default: return '访客'
     }
-    localStorage.setItem('jwtToken', data.accessToken)
+  })
+
+  function setAuth(data: { 
+    token: string, 
+    refreshToken: string, 
+    userInfo: UserInfo 
+  }) {
+    token.value = data.token
+    refreshToken.value = data.refreshToken
+    userInfo.value = data.userInfo
+    
+    localStorage.setItem('token', data.token)
     localStorage.setItem('refreshToken', data.refreshToken)
-    localStorage.setItem('username', data.username)
-    localStorage.setItem('role', data.role)
-    localStorage.setItem('nickname', data.nickname)
+    localStorage.setItem('userInfo', JSON.stringify(data.userInfo))
   }
 
   function clearAuth() {
     token.value = null
     refreshToken.value = null
-    userInfo.value = { username: '', role: '', nickname: '' }
-    localStorage.removeItem('jwtToken')
+    userInfo.value = null
+    
+    localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
-    localStorage.removeItem('username')
-    localStorage.removeItem('role')
-    localStorage.removeItem('nickname')
+    localStorage.removeItem('userInfo')
   }
 
-  function getAuthHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
+  function loadFromStorage() {
+    const storedUserInfo = localStorage.getItem('userInfo')
+    if (storedUserInfo) {
+      try {
+        userInfo.value = JSON.parse(storedUserInfo)
+      } catch (e) {
+        console.error('Failed to parse user info:', e)
+        clearAuth()
+      }
+    }
+  }
+
+  function getAuthHeaders() {
+    return {
+      'Authorization': `Bearer ${token.value}`,
       'Content-Type': 'application/json'
     }
-    if (token.value && token.value !== 'undefined') {
-      headers['Authorization'] = `Bearer ${token.value}`
-    }
-    return headers
   }
+
+  // 初始化时从localStorage加载数据
+  loadFromStorage()
 
   return {
     token,
@@ -65,6 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
     displayRole,
     setAuth,
     clearAuth,
+    loadFromStorage,
     getAuthHeaders
   }
 })

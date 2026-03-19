@@ -4,47 +4,55 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/auth'
 
+interface LoginForm {
+  username: string
+  password: string
+}
+
 const router = useRouter()
 const authStore = useAuthStore()
 
-const username = ref('')
-const password = ref('')
+const form = ref<LoginForm>({
+  username: '',
+  password: ''
+})
+
 const loading = ref(false)
 const error = ref('')
 const success = ref(false)
 
-async function handleLogin() {
-  if (!username.value || !password.value) {
-    error.value = '请输入用户名和密码'
-    return
-  }
+const isFormValid = ref(false)
 
+function validateForm() {
+  isFormValid.value = form.value.username.trim() !== '' && 
+                     form.value.password.trim() !== ''
+}
+
+async function handleLogin() {
+  if (!isFormValid.value) return
+  
   loading.value = true
   error.value = ''
   success.value = false
-
+  
   try {
     const response = await authApi.login({
-      username: username.value,
-      password: password.value
+      username: form.value.username.trim(),
+      password: form.value.password
     })
     
-    authStore.setAuth(response)
-    success.value = true
-    error.value = ''
+    authStore.setAuth({
+      token: response.token,
+      refreshToken: response.refreshToken,
+      userInfo: response.userInfo
+    })
     
-    // 延迟跳转以显示成功消息
+    success.value = true
     setTimeout(() => {
-      // 根据角色跳转
-      if (response.role === 'ROLE_ADMIN') {
-        router.push('/admin')
-      } else {
-        router.push('/')
-      }
-    }, 1500)
-  } catch (err) {
-    error.value = '用户名或密码错误'
-    success.value = false
+      router.push('/admin')
+    }, 1000)
+  } catch (err: any) {
+    error.value = err.message || '登录失败'
   } finally {
     loading.value = false
   }
@@ -52,127 +60,115 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-50 via-white to-purple-50">
+  <div class="min-h-screen bg-background flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
-      <!-- Logo 和标题 -->
-      <div class="text-center animate-fade-in">
-        <div class="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-4">
-          <span class="text-2xl text-white font-bold">🔗</span>
+      <div>
+        <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-primary">
+          <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+          </svg>
         </div>
-        <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
+        <h2 class="mt-6 text-center text-3xl font-extrabold text-text-primary">
           管理员登录
         </h2>
-        <p class="mt-2 text-sm text-gray-600">
-          输入您的凭据访问管理后台
+        <p class="mt-2 text-center text-sm text-text-secondary">
+          请输入您的管理员账户信息
         </p>
       </div>
       
-      <!-- 登录表单 -->
-      <div class="card animate-slide-up">
-        <div class="p-8">
-          <form class="space-y-6" @submit.prevent="handleLogin">
-            <div>
-              <label for="username" class="form-label">用户名</label>
-              <div class="mt-1 relative rounded-md shadow-sm">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span class="text-gray-400">👤</span>
-                </div>
-                <input
-                  id="username"
-                  v-model="username"
-                  name="username"
-                  type="text"
-                  required
-                  class="input-field pl-10"
-                  placeholder="请输入用户名"
-                  :disabled="loading"
-                />
-              </div>
+      <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
+        <div v-if="error" class="rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
             </div>
-            
-            <div>
-              <label for="password" class="form-label">密码</label>
-              <div class="mt-1 relative rounded-md shadow-sm">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span class="text-gray-400">🔒</span>
-                </div>
-                <input
-                  id="password"
-                  v-model="password"
-                  name="password"
-                  type="password"
-                  required
-                  class="input-field pl-10"
-                  placeholder="请输入密码"
-                  :disabled="loading"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <button
-                type="submit"
-                :disabled="loading"
-                class="btn-primary w-full py-3 text-base font-medium flex items-center justify-center group"
-              >
-                <span v-if="loading" class="mr-2 animate-spin">⏳</span>
-                <span v-else class="mr-2 group-hover:scale-110 transition-transform">🔐</span>
-                {{ loading ? '登录中...' : '安全登录' }}
-              </button>
-            </div>
-          </form>
-          
-          <!-- 状态消息 -->
-          <div class="mt-6 space-y-3">
-            <transition name="fade" mode="out-in">
-              <div 
-                v-if="error" 
-                class="alert alert-error flex items-center"
-              >
-                <span class="mr-2">❌</span>
-                {{ error }}
-              </div>
-            </transition>
-            
-            <transition name="fade" mode="out-in">
-              <div 
-                v-if="success && !loading" 
-                class="alert alert-success flex items-center"
-              >
-                <span class="mr-2">✅</span>
-                登录成功，正在跳转...
-              </div>
-            </transition>
-          </div>
-          
-          <!-- 测试账号信息 -->
-          <div class="mt-8 pt-6 border-t border-gray-200">
-            <h3 class="text-sm font-medium text-gray-900 mb-3">🔑 测试账号</h3>
-            <div class="space-y-2 text-sm">
-              <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
-                <span class="text-gray-700">普通用户</span>
-                <div class="text-right">
-                  <div class="font-mono text-gray-900">user</div>
-                  <div class="font-mono text-gray-500 text-xs">123456</div>
-                </div>
-              </div>
-              <div class="flex justify-between items-center p-2 bg-blue-50 rounded">
-                <span class="text-gray-700">管理员</span>
-                <div class="text-right">
-                  <div class="font-mono text-gray-900">admin</div>
-                  <div class="font-mono text-gray-500 text-xs">123456</div>
-                </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-red-800 dark:text-red-200">
+                登录失败
+              </h3>
+              <div class="mt-2 text-sm text-red-700 dark:text-red-300">
+                <p>{{ error }}</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
+        
+        <div v-if="success" class="rounded-md bg-green-50 dark:bg-green-900/20 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-green-800 dark:text-green-200">
+                登录成功！正在跳转...
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-md shadow-sm -space-y-px">
+          <div>
+            <label for="username" class="sr-only">用户名</label>
+            <input
+              id="username"
+              v-model="form.username"
+              @input="validateForm"
+              name="username"
+              type="text"
+              required
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-border placeholder-text-secondary text-text-primary rounded-t-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm bg-background"
+              placeholder="用户名"
+              :disabled="loading"
+            />
+          </div>
+          <div>
+            <label for="password" class="sr-only">密码</label>
+            <input
+              id="password"
+              v-model="form.password"
+              @input="validateForm"
+              name="password"
+              type="password"
+              required
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-border placeholder-text-secondary text-text-primary rounded-b-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm bg-background"
+              placeholder="密码"
+              :disabled="loading"
+            />
+          </div>
+        </div>
+
+        <div>
+          <button
+            type="submit"
+            :disabled="!isFormValid || loading"
+            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <span class="absolute left-0 inset-y-0 flex items-center pl-3">
+              <svg v-if="loading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <svg v-else class="h-5 w-5 text-white group-hover:text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+              </svg>
+            </span>
+            {{ loading ? '登录中...' : '登录' }}
+          </button>
+        </div>
+        
+        <div class="text-center text-sm text-text-secondary">
+          <p>默认管理员账户: admin / admin123</p>
+        </div>
+      </form>
       
-      <!-- 返回首页 -->
       <div class="text-center">
         <router-link 
           to="/" 
-          class="text-sm text-blue-600 hover:text-blue-500 font-medium transition-colors"
+          class="text-primary hover:text-primary-hover font-medium"
         >
           ← 返回首页
         </router-link>
@@ -180,15 +176,4 @@ async function handleLogin() {
     </div>
   </div>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>
+</file>

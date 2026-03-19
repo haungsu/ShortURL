@@ -1,77 +1,99 @@
-import { useAuthStore } from '@/stores/auth'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-
-interface RequestOptions extends RequestInit {
-  skipAuth?: boolean
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
 }
 
-export async function request<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const authStore = useAuthStore()
-  const { skipAuth, ...fetchOptions } = options
+class HttpClient {
+  private baseUrl: string
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(fetchOptions.headers as Record<string, string>)
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl
   }
 
-  if (!skipAuth && authStore.token) {
-    headers['Authorization'] = `Bearer ${authStore.token}`
-  }
-
-  const response = await fetch(`${BASE_URL}${url}`, {
-    ...fetchOptions,
-    headers
-  })
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      authStore.clearAuth()
-      window.location.href = '/login'
+  private async request<T>(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
+    const config: RequestInit = {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+      },
+      ...options
     }
-    
-    // 处理不同类型的响应
-    let errorMessage = '请求失败'
-    const contentType = response.headers.get('content-type')
-    
-    if (contentType && contentType.includes('application/json')) {
-      try {
-        const error = await response.json()
-        errorMessage = error.message || `HTTP ${response.status}`
-      } catch (e) {
-        errorMessage = `HTTP ${response.status}`
+
+    // 添加认证头
+    const token = localStorage.getItem('token')
+    if (token && config.headers) {
+      (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}${url}`, config)
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Token过期，清除认证信息
+          localStorage.removeItem('token')
+          localStorage.removeItem('refreshToken')
+          localStorage.removeItem('userInfo')
+          window.location.href = '/login'
+          throw new Error('认证已过期，请重新登录')
+        }
+        
+        const errorData = await response.json().catch(() => ({ message: '请求失败' }))
+        throw new Error(errorData.message || `HTTP ${response.status}`)
       }
-    } else {
-      errorMessage = `HTTP ${response.status}: ${response.statusText}`
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error('API请求失败:', error)
+      throw error
     }
-    
-    throw new Error(errorMessage)
   }
 
-  if (response.status === 204) {
-    return undefined as T
+  public get<T>(url: string, params?: Record<string, any>): Promise<ApiResponse<T>> {
+    let queryString = ''
+    if (params) {
+      const searchParams = new URLSearchParams()
+      Object.keys(params).forEach(key => {
+        if (params[key] !== undefined && params[key] !== null) {
+          searchParams.append(key, String(params[key]))
+        }
+      })
+      queryString = `?${searchParams.toString()}`
+    }
+    return this.request<T>(`${url}${queryString}`, { method: 'GET' })
   }
 
-  // 检查响应内容类型
-  const contentType = response.headers.get('content-type')
-  if (!contentType || !contentType.includes('application/json')) {
-    // 如果不是JSON响应，返回文本或其他适当类型
-    const text = await response.text()
-    return text as T
+  public post<T>(url: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(url, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined
+    })
   }
 
-  try {
-    return await response.json()
-  } catch (error) {
-    console.error('JSON解析失败:', error)
-    throw new Error('服务器响应格式错误')
+  public put<T>(url: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(url, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined
+    })
+  }
+
+  public patch<T>(url: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(url, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined
+    })
+  }
+
+  public delete<T>(url: string): Promise<ApiResponse<T>> {
+    return this.request<T>(url, { method: 'DELETE' })
   }
 }
 
-export const api = {
-  get: <T>(url: string, options?: RequestOptions) => request<T>(url, { ...options, method: 'GET' }),
-  post: <T>(url: string, body?: unknown, options?: RequestOptions) => request<T>(url, { ...options, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
-  put: <T>(url: string, body?: unknown, options?: RequestOptions) => request<T>(url, { ...options, method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
-  patch: <T>(url: string, body?: unknown, options?: RequestOptions) => request<T>(url, { ...options, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(url: string, options?: RequestOptions) => request<T>(url, { ...options, method: 'DELETE' })
-}
+export const httpClient = new HttpClient()

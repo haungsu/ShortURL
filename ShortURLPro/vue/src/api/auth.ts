@@ -1,25 +1,45 @@
-import { api } from './request'
+import { httpClient } from './request'
 
-export interface LoginRequest {
+interface LoginRequest {
   username: string
   password: string
 }
 
-export interface LoginResponse {
-  accessToken: string
+interface LoginResponse {
+  token: string
   refreshToken: string
-  username: string
-  role: string
-  nickname: string
+  userInfo: {
+    id: number
+    username: string
+    role: string
+  }
 }
 
-export interface TokenValidationResponse {
+interface TokenValidationResponse {
   valid: boolean
-  username: string
-  role: string
+  userInfo: {
+    id: number
+    username: string
+    role: string
+  }
 }
 
 export const authApi = {
-  login: (data: LoginRequest) => api.post<LoginResponse>('/api/auth/login', data, { skipAuth: true }),
-  validate: () => api.get<TokenValidationResponse>('/api/auth/validate')
+  // 管理员登录
+  login(data: LoginRequest): Promise<LoginResponse> {
+    return httpClient.post<LoginResponse>('/api/auth/login', data)
+      .then(response => response.data)
+  },
+
+  // 验证Token有效性
+  validate(): Promise<TokenValidationResponse> {
+    return httpClient.get<TokenValidationResponse>('/api/auth/validate')
+      .then(response => response.data)
+  },
+
+  // 刷新Token
+  refreshToken(refreshToken: string): Promise<LoginResponse> {
+    return httpClient.post<LoginResponse>('/api/auth/refresh', { refreshToken })
+      .then(response => response.data)
+  }
 }
