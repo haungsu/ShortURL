@@ -1,4 +1,23 @@
 services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: short-url-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - short-url-redis-data:/data
+    networks:
+      - short-url-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 5s
+
   # MySQL服务（优化时区、健康检查）
   mysql:
     image: mysql:8.0
@@ -40,6 +59,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - short-url-network
     volumes:
@@ -52,3 +73,4 @@ networks:
 volumes:
   short-url-mysql-data:
   short-url-app-logs:
+  short-url-redis-data:
