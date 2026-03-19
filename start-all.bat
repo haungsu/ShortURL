@@ -2,23 +2,25 @@
 chcp 65001 >nul
 title ShortURLPro 快捷启动
 
+cls
 echo ================================
 echo ShortURLPro 快捷启动菜单
 echo ================================
+echo.
 
 :menu
-echo.
 echo 请选择要启动的服务:
 echo 1. 环境检查与智能启动 (推荐)
-echo 2. 启动前端开发服务器 (Vue)
+echo 2. 启动前端开发服务器 (Vue) - 独立模式
 echo 3. 构建并预览前端 (生产环境)
 echo 4. 启动后端服务 (Spring Boot)
 echo 5. 同时启动前后端
 echo 6. 启动完整开发环境 (包含数据库)
-echo 7. 退出
+echo 7. 启动前端独立开发环境
+echo 8. 退出
 echo.
 
-set /p choice=请输入选项 (1-7): 
+set /p choice=请输入选项 (1-8):  
 
 if "%choice%"=="1" (
     call "%~dp0ensure-startup.bat"
@@ -84,6 +86,10 @@ if "%choice%"=="6" (
     goto menu
 )
 if "%choice%"=="7" (
+    call "%~dp0start-frontend-standalone.bat"
+    goto menu
+)
+if "%choice%"=="8" (
     echo 再见！
     exit /b 0
 )

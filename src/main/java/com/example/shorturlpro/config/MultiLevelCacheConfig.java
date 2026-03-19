@@ -37,11 +37,12 @@ public class MultiLevelCacheConfig {
     }
 
     /**
-     * Redis缓存管理器 (L2缓存)
+     * Redis缓存管理器引用 (L2缓存)
      * 用于分布式缓存，支持多实例共享
+     * 注意：实际的Redis缓存管理器在RedisConfig中配置
      */
-    @Bean("redisCacheManager")
-    public CacheManager redisCacheManager() {
+    @Bean("distributedCacheManager")
+    public CacheManager distributedCacheManager() {
         // 这个会在RedisConfig中被配置，这里只是声明Bean名称
         return null;
     }

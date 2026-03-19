@@ -4,6 +4,7 @@ interface ApiResponse<T> {
   code: number
   message: string
   data: T
+  timestamp: number
 }
 
 class HttpClient {
@@ -44,8 +45,18 @@ class HttpClient {
           throw new Error('认证已过期，请重新登录')
         }
         
-        const errorData = await response.json().catch(() => ({ message: '请求失败' }))
-        throw new Error(errorData.message || `HTTP ${response.status}`)
+        // 尝试解析统一的错误响应格式
+        const errorData = await response.json().catch(() => ({ 
+          code: response.status, 
+          message: '请求失败' 
+        }))
+        
+        // 如果是统一的ApiResponse格式
+        if (errorData && typeof errorData === 'object' && 'message' in errorData) {
+          throw new Error(errorData.message || `HTTP ${response.status}`)
+        } else {
+          throw new Error(`HTTP ${response.status}: ${errorData.message || '请求失败'}`)
+        }
       }
 
       const data = await response.json()

@@ -1,5 +1,6 @@
 package com.example.shorturlpro.controller;
 
+import com.example.shorturlpro.dto.ApiResponse;
 import com.example.shorturlpro.dto.LoginRequest;
 import com.example.shorturlpro.dto.LoginResponse;
 import com.example.shorturlpro.dto.TokenRefreshRequest;
@@ -9,7 +10,7 @@ import com.example.shorturlpro.repository.UserRepository;
 import com.example.shorturlpro.service.UserDetailsServiceImpl;
 import com.example.shorturlpro.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
@@ -49,9 +50,9 @@ public class AuthController {
             summary = "用户登录",
             description = "验证用户名密码，生成JWT Token\n\n**权限要求**：公开接口，无需认证\n\n**Header参数**：无\n\n**Body参数**：用户名和密码"
     )
-    @ApiResponse(responseCode = "200", description = "登录成功，返回Token和用户信息")
-    @ApiResponse(responseCode = "401", description = "用户名或密码错误")
-    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "登录成功，返回Token和用户信息")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "用户名或密码错误")
+    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         try {
             // 1. 认证用户名密码（Spring Security自动BCrypt校验）
             authenticationManager.authenticate(
@@ -77,8 +78,10 @@ public class AuthController {
         final String refreshToken = jwtUtil.generateRefreshToken(userDetails);
 
         log.info("用户{}登录成功，角色{}", request.getUsername(), role);
-        // 7. 返回响应
-        return new LoginResponse(accessToken, refreshToken, request.getUsername(), role, user.getNickname());
+        // 7. 构造响应数据
+        LoginResponse loginResponse = new LoginResponse(accessToken, refreshToken, request.getUsername(), role, user.getNickname());
+        // 8. 返回标准ApiResponse格式
+        return ApiResponse.success("登录成功", loginResponse);
     }
 
     /**
@@ -90,9 +93,9 @@ public class AuthController {
             summary = "刷新Token",
             description = "使用刷新Token获取新的访问Token\n\n**权限要求**：公开接口，无需认证\n\n**Header参数**：无\n\n**Body参数**：刷新Token"
     )
-    @ApiResponse(responseCode = "200", description = "Token刷新成功")
-    @ApiResponse(responseCode = "401", description = "刷新Token无效或已过期")
-    public LoginResponse refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token刷新成功")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "刷新Token无效或已过期")
+    public ApiResponse<LoginResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         String refreshToken = request.getRefreshToken();
         
         // 1. 验证刷新Token格式
@@ -137,7 +140,8 @@ public class AuthController {
         final String newRefreshToken = jwtUtil.generateRefreshToken(userDetails);
         
         log.info("用户{}刷新Token成功", username);
-        return new LoginResponse(newAccessToken, newRefreshToken, username, role, user.getNickname());
+        LoginResponse loginResponse = new LoginResponse(newAccessToken, newRefreshToken, username, role, user.getNickname());
+        return ApiResponse.success("Token刷新成功", loginResponse);
     }
 
     /**
@@ -149,7 +153,7 @@ public class AuthController {
             summary = "验证Token",
             description = "验证JWT Token的有效性\n\n**权限要求**：需要认证\n\n**Header参数**：Authorization: Bearer {token}\n\n**Body参数**：无"
     )
-    @ApiResponse(responseCode = "200", description = "Token验证结果")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token验证结果")
     public TokenValidationResponse validateToken(Authentication authentication) {
         try {
             if (authentication == null || !authentication.isAuthenticated()) {
@@ -179,10 +183,8 @@ public class AuthController {
             summary = "用户注销",
             description = "注销当前用户的Token\n\n**权限要求**：需要认证\n\n**Header参数**：Authorization: Bearer {token}\n\n**Body参数**：可选的Token列表"
     )
-    @ApiResponse(responseCode = "200", description = "注销成功")
-    public Map<String, Object> logout(Authentication authentication, @RequestBody(required = false) Map<String, Object> requestBody) {
-        Map<String, Object> response = new HashMap<>();
-        
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "注销成功")
+    public ApiResponse<Object> logout(Authentication authentication, @RequestBody(required = false) Map<String, Object> requestBody) {
         try {
             if (authentication != null && authentication.isAuthenticated()) {
                 UserDetails userDetails = (UserDetails) authentication.getPrincipal();
@@ -196,15 +198,11 @@ public class AuthController {
                 }
             }
             
-            response.put("success", true);
-            response.put("message", "注销成功");
-            return response;
+            return ApiResponse.success("注销成功", null);
             
         } catch (Exception e) {
             log.error("注销失败", e);
-            response.put("success", false);
-            response.put("message", "注销失败: " + e.getMessage());
-            return response;
+            return ApiResponse.error("注销失败: " + e.getMessage());
         }
     }
 }

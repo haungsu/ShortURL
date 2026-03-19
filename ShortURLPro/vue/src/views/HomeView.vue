@@ -39,9 +39,25 @@ async function generateShortUrl() {
   
   loading.value = true
   try {
+    console.log('发送生成请求:', form.value.originalUrl.trim());
     const response = await shortUrlApi.generate({
       originalUrl: form.value.originalUrl.trim()
     })
+    
+    console.log('API响应:', response);
+    
+    // 检查响应是否存在
+    if (!response) {
+      throw new Error('API无响应');
+    }
+    
+    // 检查必需字段
+    if (!response.shortUrl) {
+      throw new Error('响应缺少shortUrl字段');
+    }
+    if (!response.shortCode) {
+      throw new Error('响应缺少shortCode字段');
+    }
     
     generatedUrl.value = response.shortUrl
     shortCode.value = response.shortCode
@@ -50,7 +66,8 @@ async function generateShortUrl() {
     // 清空表单
     form.value.originalUrl = ''
   } catch (error: any) {
-    alert(`生成失败: ${error.message}`)
+    console.error('生成短链接失败:', error);
+    alert(`生成失败: ${error.message || '未知错误'}`)
   } finally {
     loading.value = false
   }
@@ -219,4 +236,3 @@ function handleLogout() {
     </div>
   </div>
 </template>
-</file>

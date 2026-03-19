@@ -1,5 +1,6 @@
 package com.example.shorturlpro.controller;
 
+import com.example.shorturlpro.dto.ApiResponse;
 import com.example.shorturlpro.dto.ShortUrlCreateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
@@ -13,7 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -56,12 +57,12 @@ public class ShortUrlController {
             summary = "生成短链接",
             description = "将长链接转换为短链接\n\n**权限要求**：公开接口，无需认证"
     )
-    @ApiResponse(responseCode = "200", description = "生成成功",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "生成成功",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = ShortUrlGenerateResponse.class)))
-    @ApiResponse(responseCode = "400", description = "请求参数错误")
-    @ApiResponse(responseCode = "500", description = "服务器内部错误")
-    public ResponseEntity<?> generateShortUrl(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数错误")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "服务器内部错误")
+    public ResponseEntity<ApiResponse<ShortUrlGenerateResponse>> generateShortUrl(
             @Valid @RequestBody ShortUrlGenerateRequest request) {
 
         try {
@@ -97,29 +98,24 @@ public class ShortUrlController {
 
             log.info("短链接生成成功: {} -> {}，用户ID：{}，用户名：{}",
                     response.getShortCode(), response.getShortUrl(), userId, username);
-            return ResponseEntity.ok(response);
+            
+            return ResponseEntity.ok(ApiResponse.success(response));
 
         } catch (IllegalArgumentException e) {
             log.warn("参数校验失败: {}", e.getMessage());
-            Map<String, Object> error = new HashMap<>();
-            error.put("code", 400);
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest(e.getMessage()));
 
             // 捕获用户不存在的异常
         } catch (RuntimeException e) {
             log.warn("用户信息异常: {}", e.getMessage());
-            Map<String, Object> error = new HashMap<>();
-            error.put("code", 401);
-            error.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.unauthorized(e.getMessage()));
 
         } catch (Exception e) {
             log.error("生成短链接失败", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("code", 500);
-            error.put("message", "服务器内部错误：" + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("生成短链接失败: " + e.getMessage()));
         }
     }
 
@@ -132,8 +128,8 @@ public class ShortUrlController {
             summary = "短链接跳转",
             description = "根据短码进行302重定向到原始链接，并更新访问统计\n\n**权限要求**：公开接口，无需认证"
     )
-    @ApiResponse(responseCode = "302", description = "重定向到原始链接")
-    @ApiResponse(responseCode = "404", description = "短链接不存在或已被禁用")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "302", description = "重定向到原始链接")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "短链接不存在或已被禁用")
     public ResponseEntity<Void> redirectToOriginalUrl(
             @Parameter(description = "短链接码", example = "abc123xyz")
             @PathVariable String shortCode) {
@@ -162,10 +158,10 @@ public class ShortUrlController {
             summary = "获取系统统计信息",
             description = "获取短链接系统的统计信息\n\n**权限要求**：需要认证"
     )
-    @ApiResponse(responseCode = "200", description = "获取成功",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "获取成功",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = Map.class)))
-    public ResponseEntity<Map<String, Object>> getStats() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         try {
             Map<String, Object> stats = new HashMap<>();
             
@@ -191,13 +187,12 @@ public class ShortUrlController {
             stats.put("enabledCount", enabledCount);
             stats.put("disabledCount", disabledCount);
             
-            return ResponseEntity.ok(stats);
+            return ResponseEntity.ok(ApiResponse.success(stats));
             
         } catch (Exception e) {
             log.error("获取统计信息失败", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", "获取统计信息失败：" + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("获取统计信息失败: " + e.getMessage()));
         }
     }
 
@@ -209,7 +204,7 @@ public class ShortUrlController {
             summary = "更新短链接状态",
             description = "更新短链接的状态（启用/禁用）\n\n**权限要求**：需要认证"
     )
-    @ApiResponse(responseCode = "200", description = "更新成功")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "更新成功")
     public ResponseEntity<?> updateShortUrlStatus(
             @Parameter(description = "短链接ID") @PathVariable Long id,
             @Parameter(description = "状态信息") @RequestBody Map<String, String> request) {
@@ -266,12 +261,12 @@ public class ShortUrlController {
             summary = "管理员创建短链接",
             description = "管理员手动创建短链接\n\n**权限要求**：需要认证且具有管理员权限"
     )
-    @ApiResponse(responseCode = "200", description = "创建成功",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "创建成功",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = ShortUrlGenerateResponse.class)))
-    @ApiResponse(responseCode = "400", description = "请求参数错误")
-    @ApiResponse(responseCode = "401", description = "未认证")
-    @ApiResponse(responseCode = "403", description = "权限不足")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "请求参数错误")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "权限不足")
     public ResponseEntity<?> createShortUrl(
             @Valid @RequestBody ShortUrlCreateRequest request) {
         
@@ -329,14 +324,17 @@ public class ShortUrlController {
             }
             
             log.info("管理员创建短链接成功: {} -> {}", response.getShortCode(), response.getShortUrl());
-            return ResponseEntity.ok(response);
+            // 包装在统一的响应格式中
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 200);
+            result.put("message", "success");
+            result.put("data", response);
+            return ResponseEntity.ok(result);
             
         } catch (IllegalArgumentException e) {
             log.warn("参数校验失败: {}", e.getMessage());
-            Map<String, Object> error = new HashMap<>();
-            error.put("code", 400);
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest(e.getMessage()));
             
         } catch (Exception e) {
             log.error("创建短链接失败", e);
@@ -344,6 +342,41 @@ public class ShortUrlController {
             error.put("code", 500);
             error.put("message", "服务器内部错误：" + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
+    /**
+     * 删除短链接接口
+     * DELETE /api/short-url/{id}
+     */
+    @DeleteMapping("/{id}")
+    @Operation(
+            summary = "删除短链接",
+            description = "根据ID删除短链接记录\n\n**权限要求**：需要认证"
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "删除成功")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "未认证")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "短链接不存在")
+    public ResponseEntity<ApiResponse<Object>> deleteShortUrl(
+            @Parameter(description = "短链接ID") @PathVariable Long id) {
+        
+        try {
+            log.info("收到删除短链接请求: id={}", id);
+            
+            // 调用服务层删除方法
+            shortUrlService.deleteShortUrlByAdmin(id);
+            
+            log.info("短链接删除成功: id={}", id);
+            return ResponseEntity.ok(ApiResponse.success("删除成功", null));
+            
+        } catch (RuntimeException e) {
+            log.warn("删除短链接失败: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("删除短链接失败: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("删除短链接失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("删除短链接失败: " + e.getMessage()));
         }
     }
 

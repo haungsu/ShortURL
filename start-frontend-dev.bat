@@ -21,7 +21,7 @@ node --version
 echo.
 
 REM 切换到 vue 目录
-cd /d "%~dp0vue"
+cd /d "%~dp0ShortURLPro\vue"
 if errorlevel 1 (
     echo [错误] 无法进入 vue 目录
     pause

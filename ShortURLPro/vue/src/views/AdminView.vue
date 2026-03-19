@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { shortUrlApi, type ShortUrlResponse, type ShortUrlStats } from '@/api/shorturl'
+import { authApi } from '@/api/auth'
 
 interface CreateForm {
   name: string
@@ -59,27 +60,89 @@ onMounted(async () => {
 
 async function checkAdminAuth() {
   try {
-    const response = await authStore.validate()
-    if (response.userInfo.role !== 'ROLE_ADMIN') {
-      alert('权限不足')
-      router.push('/')
+    console.log('开始权限验证...');
+    
+    // 检查是否有token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('未找到token，跳转到登录页');
+      alert('请先登录');
+      router.push('/login');
+      return;
     }
-  } catch (error) {
-    router.push('/login')
+    
+    const response = await authApi.validate();
+    console.log('权限验证响应:', response);
+    
+    // 检查响应是否存在
+    if (!response) {
+      console.error('权限验证响应为空');
+      alert('权限验证失败：服务器无响应');
+      router.push('/login');
+      return;
+    }
+    
+    // 检查token有效性
+    if (!response.valid) {
+      console.log('Token无效:', response.errorMessage);
+      alert('Token无效: ' + (response.errorMessage || '未知错误'));
+      router.push('/login');
+      return;
+    }
+    
+    // 检查管理员权限
+    if (response.role !== 'ROLE_ADMIN') {
+      console.log('权限不足，当前角色:', response.role);
+      alert('权限不足，需要管理员权限');
+      router.push('/');
+      return;
+    }
+    
+    console.log('权限验证通过，角色:', response.role);
+    // 更新store中的用户信息
+    authStore.loadFromStorage();
+    
+  } catch (error: any) {
+    console.error('权限验证失败:', error);
+    console.error('错误详情:', error.response || error.message || error);
+    alert('权限验证失败，请重新登录: ' + (error.message || '网络错误'));
+    router.push('/login');
   }
 }
 
 async function loadStats() {
   try {
-    stats.value = await shortUrlApi.getStats()
-  } catch (error) {
+    const statsData = await shortUrlApi.getStats()
+    // 处理不同的统计字段名称
+    stats.value = {
+      totalUrls: statsData.totalUrls || statsData.totalCount || 0,
+      totalClicks: statsData.totalClicks || 0,
+      todayClicks: statsData.todayClicks || 0,
+      activeUrls: statsData.activeUrls || statsData.enabledCount || 0
+    }
+  } catch (error: any) {
     console.error('加载统计失败:', error)
+    // 设置默认值
+    stats.value = {
+      totalUrls: 0,
+      totalClicks: 0,
+      todayClicks: 0,
+      activeUrls: 0
+    }
   }
 }
 
 async function loadShortUrls() {
   loading.value = true
   try {
+    console.log('发送请求参数:', {
+      page: currentPage.value,
+      size: 10,
+      keyword: searchKeyword.value,
+      status: statusFilter.value,
+      sort: sortOrder.value
+    })
+    
     const response = await shortUrlApi.getList({
       page: currentPage.value,
       size: 10,
@@ -88,11 +151,20 @@ async function loadShortUrls() {
       sort: sortOrder.value
     })
     
-    shortUrls.value = response.content
-    totalPages.value = response.totalPages
-    totalElements.value = response.totalElements
-  } catch (error) {
+    console.log('API响应数据:', response)
+    
+    // 直接使用返回的数据
+    shortUrls.value = response.content || []
+    totalPages.value = response.totalPages || 0
+    totalElements.value = response.totalElements || 0
+    
+  } catch (error: any) {
     console.error('加载短链接列表失败:', error)
+    console.error('错误详情:', error.response || error.message || error)
+    shortUrls.value = []
+    totalPages.value = 0
+    totalElements.value = 0
+    alert('加载数据失败: ' + (error.message || '网络错误'))
   } finally {
     loading.value = false
   }
@@ -516,4 +588,3 @@ function getStatusText(status: string) {
     </div>
   </div>
 </template>
-</file>

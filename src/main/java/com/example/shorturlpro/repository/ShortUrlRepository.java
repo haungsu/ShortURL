@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -153,4 +154,24 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
     List<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingAndStatus(
             @Param("keyword") String keyword, 
             @Param("status") ShortUrlStatus status);
+
+    /**
+     * 统计所有点击次数（简化版）
+     */
+    default long sumAllClickCounts() {
+        return sumTotalClickCount();
+    }
+
+    /**
+     * 根据日期范围统计点击次数
+     */
+    @Query("SELECT COALESCE(SUM(s.clickCount), 0) FROM ShortUrl s WHERE s.createdAt BETWEEN :startDate AND :endDate")
+    long sumClickCountsByDateRange(@Param("startDate") LocalDateTime startDate, 
+                                  @Param("endDate") LocalDateTime endDate);
+
+    /**
+     * 根据状态统计数量
+     */
+    @Query("SELECT COUNT(s) FROM ShortUrl s WHERE s.status = :status")
+    long countByStatus(@Param("status") ShortUrlStatus status);
 }

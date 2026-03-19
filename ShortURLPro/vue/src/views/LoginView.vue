@@ -39,12 +39,22 @@ async function handleLogin() {
     const response = await authApi.login({
       username: form.value.username.trim(),
       password: form.value.password
-    })
+    });
+    
+    // 验证响应格式
+    if (!response || typeof response !== 'object' || !response.accessToken) {
+      console.error('无效的登录响应:', response);
+      throw new Error('服务器返回了无效的响应格式');
+    }
     
     authStore.setAuth({
-      token: response.token,
+      token: response.accessToken,
       refreshToken: response.refreshToken,
-      userInfo: response.userInfo
+      userInfo: {
+        id: 0, // 后端暂未返回用户ID，使用默认值
+        username: response.username,
+        role: response.role
+      }
     })
     
     success.value = true
@@ -161,7 +171,7 @@ async function handleLogin() {
         </div>
         
         <div class="text-center text-sm text-text-secondary">
-          <p>默认管理员账户: admin / admin123</p>
+          <p>默认管理员账户: admin / 123456</p>
         </div>
       </form>
       
@@ -176,4 +186,3 @@ async function handleLogin() {
     </div>
   </div>
 </template>
-</file>

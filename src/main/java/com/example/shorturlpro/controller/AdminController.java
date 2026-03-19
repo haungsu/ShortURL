@@ -1,5 +1,6 @@
 package com.example.shorturlpro.controller;
 
+import com.example.shorturlpro.dto.ApiResponse;
 import com.example.shorturlpro.dto.ShortUrlCreateRequest;
 import com.example.shorturlpro.dto.ShortUrlResponse;
 import com.example.shorturlpro.entity.ShortUrl;
@@ -10,7 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
+
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.ByteArrayOutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +53,54 @@ public class AdminController {
     private final ShortUrlService shortUrlService;
 
     /**
+     * 获取统计信息（管理员权限）
+     */
+    @GetMapping("/stats")
+    @Operation(
+            summary = "获取统计信息",
+            description = "管理员获取系统统计信息\n\n**权限要求**：ROLE_ADMIN"
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "获取成功",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = Map.class)))
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
+        try {
+            log.info("管理员查询统计信息");
+            
+            Map<String, Object> stats = new HashMap<>();
+            
+            // 总链接数
+            long totalUrls = shortUrlRepository.count();
+            stats.put("totalUrls", totalUrls);
+            
+            // 总点击量
+            long totalClicks = shortUrlRepository.sumAllClickCounts();
+            stats.put("totalClicks", totalClicks);
+            
+            // 今日点击量
+            LocalDate today = LocalDate.now();
+            LocalDateTime startOfDay = today.atStartOfDay();
+            LocalDateTime endOfDay = today.atTime(23, 59, 59);
+            long todayClicks = shortUrlRepository.sumClickCountsByDateRange(startOfDay, endOfDay);
+            stats.put("todayClicks", todayClicks);
+            
+            // 活跃链接数（启用状态的链接）
+            long activeUrls = shortUrlRepository.countByStatus(ShortUrlStatus.ENABLED);
+            stats.put("activeUrls", activeUrls);
+            
+            log.info("统计信息查询完成: totalUrls={}, totalClicks={}, todayClicks={}, activeUrls={}", 
+                    totalUrls, totalClicks, todayClicks, activeUrls);
+                        
+            return ResponseEntity.ok(ApiResponse.success(stats));
+            
+        } catch (Exception e) {
+            log.error("查询统计信息失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("查询统计信息失败: " + e.getMessage()));
+        }
+    }
+
+    /**
      * 获取所有短链接列表（管理员权限）
      */
     @GetMapping("/list")
@@ -58,10 +108,10 @@ public class AdminController {
             summary = "获取短链接列表",
             description = "管理员获取所有短链接列表，支持分页、搜索和筛选\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "获取成功",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "获取成功",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = Page.class)))
-    public ResponseEntity<Page<ShortUrlResponse>> getAllShortUrls(
+    public ResponseEntity<ApiResponse<Page<ShortUrlResponse>>> getAllShortUrls(
             @Parameter(description = "页码（从0开始）") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "每页大小") @RequestParam(defaultValue = "10") int size,
             @Parameter(description = "搜索关键词") @RequestParam(required = false) String search,
@@ -100,11 +150,13 @@ public class AdminController {
             Page<ShortUrlResponse> responsePage = shortUrlPage.map(this::convertToResponse);
             
             log.info("查询完成，共找到 {} 条记录", responsePage.getTotalElements());
-            return ResponseEntity.ok(responsePage);
+            
+            return ResponseEntity.ok(ApiResponse.success(responsePage));
 
         } catch (Exception e) {
             log.error("查询短链接列表失败", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("查询短链接列表失败: " + e.getMessage()));
         }
     }
 
@@ -116,10 +168,10 @@ public class AdminController {
             summary = "创建短链接",
             description = "管理员创建新的短链接\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "创建成功",
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "创建成功",
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = ShortUrlResponse.class)))
-    public ResponseEntity<?> createShortUrl(@Valid @RequestBody ShortUrlCreateRequest request) {
+    public ResponseEntity<ApiResponse<ShortUrlResponse>> createShortUrl(@Valid @RequestBody ShortUrlCreateRequest request) {
         try {
             log.info("管理员创建短链接: name={}, originalUrl={}", request.getName(), request.getOriginalUrl());
             
@@ -127,13 +179,13 @@ public class AdminController {
             ShortUrlResponse response = convertToResponse(shortUrl);
             
             log.info("短链接创建成功: id={}, shortCode={}", shortUrl.getId(), shortUrl.getShortCode());
-            return ResponseEntity.ok(response);
+            
+            return ResponseEntity.ok(ApiResponse.success(response));
             
         } catch (Exception e) {
             log.error("创建短链接失败", e);
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("创建短链接失败: " + e.getMessage()));
         }
     }
 
@@ -145,8 +197,8 @@ public class AdminController {
             summary = "更新短链接",
             description = "管理员更新短链接信息\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "更新成功")
-    public ResponseEntity<?> updateShortUrl(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "更新成功")
+    public ResponseEntity<ApiResponse<ShortUrlResponse>> updateShortUrl(
             @Parameter(description = "短链接ID") @PathVariable Long id,
             @Valid @RequestBody ShortUrlCreateRequest request) {
         
@@ -156,16 +208,17 @@ public class AdminController {
             ShortUrl updatedShortUrl = shortUrlService.updateShortUrlByAdmin(id, request);
             
             log.info("短链接更新成功: id={}", id);
-            return ResponseEntity.ok(convertToResponse(updatedShortUrl));
+            
+            return ResponseEntity.ok(ApiResponse.success(convertToResponse(updatedShortUrl)));
             
         } catch (RuntimeException e) {
             log.warn("更新短链接失败: {}", e.getMessage());
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("更新短链接失败: " + e.getMessage()));
         } catch (Exception e) {
             log.error("更新短链接失败", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("更新短链接失败: " + e.getMessage()));
         }
     }
 
@@ -177,8 +230,8 @@ public class AdminController {
             summary = "删除短链接",
             description = "管理员删除短链接\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "删除成功")
-    public ResponseEntity<?> deleteShortUrl(
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "删除成功")
+    public ResponseEntity<ApiResponse<Object>> deleteShortUrl(
             @Parameter(description = "短链接ID") @PathVariable Long id) {
         
         try {
@@ -187,16 +240,16 @@ public class AdminController {
             shortUrlService.deleteShortUrlByAdmin(id);
             
             log.info("短链接删除成功: id={}", id);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok(ApiResponse.success("删除成功", null));
             
         } catch (RuntimeException e) {
             log.warn("删除短链接失败: {}", e.getMessage());
-            Map<String, Object> error = new HashMap<>();
-            error.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("删除短链接失败: " + e.getMessage()));
         } catch (Exception e) {
             log.error("删除短链接失败", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("删除短链接失败: " + e.getMessage()));
         }
     }
 
@@ -208,19 +261,20 @@ public class AdminController {
             summary = "批量删除短链接",
             description = "管理员批量删除多个短链接\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "批量删除成功")
-    public ResponseEntity<?> batchDeleteShortUrls(@RequestBody List<Long> ids) {
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "批量删除成功")
+    public ResponseEntity<ApiResponse<Object>> batchDeleteShortUrls(@RequestBody List<Long> ids) {
         try {
             log.info("管理员批量删除短链接: ids={}", ids);
             
             shortUrlService.batchDeleteShortUrlsByAdmin(ids);
             
             log.info("批量删除成功，共删除 {} 条记录", ids.size());
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok(ApiResponse.success("批量删除成功，共删除 " + ids.size() + " 条记录", null));
             
         } catch (Exception e) {
             log.error("批量删除失败", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("批量删除失败: " + e.getMessage()));
         }
     }
 
@@ -232,7 +286,7 @@ public class AdminController {
             summary = "导出短链接数据",
             description = "管理员导出短链接数据为Excel文件\n\n**权限要求**：ROLE_ADMIN"
     )
-    @ApiResponse(responseCode = "200", description = "导出成功")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "导出成功")
     public ResponseEntity<byte[]> exportShortUrls(
             @Parameter(description = "搜索关键词") @RequestParam(required = false) String search,
             @Parameter(description = "状态筛选") @RequestParam(required = false) String status) {
