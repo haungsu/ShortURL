@@ -34,3 +34,19 @@ build/
 
 ### logs ###
 logs/
+
+### Generated directories ###
+.qoder/
+cli/
+extract_temp/
+
+### Configuration files ###
+src/main/resources/application-dev.yml
+src/main/resources/application-prod.yml
+src/main/resources/application.yml
+
+### Shell scripts ###
+install.sh
+install_skillhub.ps1
+install_skillhub.sh
+latest.tar.gz
