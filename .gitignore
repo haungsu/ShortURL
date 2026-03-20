@@ -41,9 +41,12 @@ cli/
 extract_temp/
 
 ### Configuration files ###
+# 排除实际配置文件
 src/main/resources/application-dev.yml
 src/main/resources/application-prod.yml
 src/main/resources/application.yml
+# 跟踪配置模板文件
+!src/main/resources/*-template.yml
 
 ### Shell scripts ###
 install.sh
