@@ -465,32 +465,42 @@
         }
       }
     },
-    "/api/short-url/status/{shortCode}": {
+    "/api/short-url/status/{id}": {
       "patch": {
         "tags": ["管理接口"],
         "summary": "更新短链接状态",
-        "description": "启用或禁用指定的短链接\n\n**权限要求**：需要认证",
+        "description": "更新短链接的状态（启用/禁用）\n\n**权限要求**：需要认证",
         "operationId": "updateShortUrlStatus",
         "parameters": [
           {
-            "name": "shortCode",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             },
-            "description": "短链接码"
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/ShortUrlStatus"
-            },
-            "description": "目标状态"
+            "description": "短链接ID"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": ["ENABLED", "DISABLED"],
+                    "description": "目标状态"
+                  }
+                },
+                "required": ["status"]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "状态更新成功",

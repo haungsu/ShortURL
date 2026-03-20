@@ -4,17 +4,32 @@ info:
   description: |
     ShortURL Pro 是一个基于 Spring Boot 的短链接服务系统，支持链接缩短、访问统计、用户管理等功能。
     
-    ## 核心功能
-    - 🔗 短链接生成：将长URL转换为短码
+    ## 📋 接口规范
+    - **统一响应格式**：所有接口返回统一的 ApiResponse 包装结构
+    - **认证机制**：JWT Token 认证（RS256算法）
+    - **权限控制**：基于角色的访问控制（RBAC）
+    
+    ## 🔐 访问权限分类
+    - **🔓 公开接口**：短链接生成、跳转（无需认证）
+    - **🔐 认证接口**：用户登录、Token刷新（无需认证）
+    - **👨‍💼 管理员接口**：需要 ROLE_ADMIN 角色
+    
+    ## 🎯 核心功能
+    - 🔗 短链接生成：将长URL转换为6位Base62短码
     - 🔄 302跳转：根据短码重定向到原始链接
     - 📊 访问统计：实时记录点击次数
     - 🔐 用户管理：基于Spring Security的权限控制
     - 🛠️ 管理功能：启用/禁用短链接状态
     
-    ## 访问权限
-    - **公开接口**：短链接生成、跳转、演示页
-    - **认证接口**：用户登录、登出
-    - **管理员接口**：需要 ROLE_ADMIN 角色
+    ## 📡 统一响应格式
+    ```json
+    {
+      "code": 200,
+      "message": "操作成功",
+      "data": {},
+      "timestamp": 1703123456789
+    }
+    ```
   version: 1.0.0
   contact:
     name: ShortURL Pro Team
@@ -48,6 +63,7 @@ paths:
         将原始长链接转换为短链接
         
         **权限要求**：公开接口，无需认证
+        **请求频率限制**：每分钟最多100次请求
       operationId: generateShortUrl
       requestBody:
         required: true
@@ -55,17 +71,29 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ShortUrlGenerateRequest'
+            examples:
+              basic:
+                summary: 基础请求
+                value:
+                  originalUrl: "https://www.example.com/very/long/url/that/needs/to/be/shortened"
+              withAppId:
+                summary: 带应用标识
+                value:
+                  originalUrl: "https://www.example.com/very/long/url/that/needs/to/be/shortened"
+                  appId: "myapp"
           application/x-www-form-urlencoded:
             schema:
               type: object
               properties:
                 originalUrl:
                   type: string
-                  description: 原始长链接
+                  description: 原始长链接，必须以 http:// 或 https:// 开头
+                  format: uri
                   example: https://www.example.com/very/long/url/that/needs/to/be/shortened
                 appId:
                   type: string
-                  description: 应用标识（可选）
+                  description: 应用标识（可选），用于区分不同应用的短链接
+                  maxLength: 50
                   example: myapp
               required:
                 - originalUrl
@@ -75,19 +103,45 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ShortUrlGenerateResponse'
+                $ref: '#/components/schemas/ApiResponseShortUrlGenerateResponse'
+              examples:
+                success:
+                  summary: 生成成功
+                  value:
+                    code: 200
+                    message: "success"
+                    data:
+                      shortCode: "abc123xyz"
+                      shortUrl: "http://localhost:8080/abc123xyz"
+                    timestamp: 1703123456789
         '400':
           description: 请求参数错误
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                invalidUrl:
+                  summary: URL格式错误
+                  value:
+                    code: 400
+                    message: "原始链接格式不正确，请以http://或https://开头"
+                    data: null
+                    timestamp: 1703123456789
         '500':
           description: 服务器内部错误
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
+              examples:
+                serverError:
+                  summary: 服务器错误
+                  value:
+                    code: 500
+                    message: "服务器内部错误：生成唯一短码失败，请稍后重试"
+                    data: null
+                    timestamp: 1703123456789
 
   # 公开接口 - 短链接跳转
   /{shortCode}:
@@ -125,13 +179,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '500':
           description: 服务器内部错误
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 短链接详情查询
   /api/short-url/detail/{shortCode}:
@@ -164,13 +218,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: 短链接不存在
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 短链接列表查询
   /api/short-url/list:
@@ -233,7 +287,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 创建短链接
   /api/short-url:
@@ -264,13 +318,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '401':
           description: 未认证
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 更新短链接
   /api/short-url/{id}:
@@ -309,19 +363,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '401':
           description: 未认证
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: 短链接不存在
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 删除短链接
   /api/short-url/{id}:
@@ -350,38 +404,46 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: 短链接不存在
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
-  # 管理接口 - 启用/禁用短链接
-  /api/short-url/status/{shortCode}:
+  # 管理接口 - 更新短链接状态
+  /api/short-url/status/{id}:
     patch:
       tags:
         - 管理接口
       summary: 更新短链接状态
       description: |
-        启用或禁用指定的短链接
+        更新短链接的状态（启用/禁用）
         
         **权限要求**：需要认证
       operationId: updateShortUrlStatus
       parameters:
-        - name: shortCode
+        - name: id
           in: path
           required: true
           schema:
-            type: string
-          description: 短链接码
-        - name: status
-          in: query
-          required: true
-          schema:
-            $ref: '#/components/schemas/ShortUrlStatus'
-          description: 目标状态
+            type: integer
+            format: int64
+          description: 短链接ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [ENABLED, DISABLED]
+                  description: 目标状态
+              required:
+                - status
       responses:
         '200':
           description: 状态更新成功
@@ -394,19 +456,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '401':
           description: 未认证
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
         '404':
           description: 短链接不存在
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 管理接口 - 系统统计
   /api/short-url/stats:
@@ -444,7 +506,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 认证接口 - 登录
   /login:
@@ -498,7 +560,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ApiErrorResponse'
 
   # 认证接口 - 登出
   /logout:
@@ -542,6 +604,52 @@ paths:
 
 components:
   schemas:
+    # 统一响应格式
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 响应状态码
+          example: 200
+        message:
+          type: string
+          description: 响应消息
+          example: "操作成功"
+        data:
+          type: object
+          description: 响应数据
+          nullable: true
+        timestamp:
+          type: integer
+          format: int64
+          description: 时间戳（毫秒）
+          example: 1703123456789
+      required:
+        - code
+        - message
+        - timestamp
+
+    ApiErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            code:
+              example: 400
+            message:
+              example: "请求参数错误"
+            data:
+              nullable: true
+
+    ApiResponseShortUrlGenerateResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ShortUrlGenerateResponse'
+
     # 请求DTO
     ShortUrlGenerateRequest:
       type: object
@@ -664,7 +772,7 @@ components:
       example: ENABLED
 
     # 错误响应
-    ErrorResponse:
+    ApiErrorResponse:
       type: object
       properties:
         timestamp:

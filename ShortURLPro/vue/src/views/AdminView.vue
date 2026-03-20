@@ -151,12 +151,31 @@ async function loadShortUrls() {
       sort: sortOrder.value
     })
     
-    console.log('API响应数据:', response)
+    console.log('API完整响应:', response)
     
-    // 直接使用返回的数据
-    shortUrls.value = response.content || []
+    // 检查响应是否存在
+    if (!response) {
+      console.error('API响应为空')
+      throw new Error('服务器无响应')
+    }
+    
+    // 检查content字段
+    if (!response.content) {
+      console.warn('响应中缺少content字段:', response)
+      shortUrls.value = []
+    } else {
+      console.log('设置短链接列表:', response.content)
+      shortUrls.value = response.content
+    }
+    
     totalPages.value = response.totalPages || 0
     totalElements.value = response.totalElements || 0
+    
+    console.log('最终状态:', {
+      shortUrlsLength: shortUrls.value.length,
+      totalPages: totalPages.value,
+      totalElements: totalElements.value
+    })
     
   } catch (error: any) {
     console.error('加载短链接列表失败:', error)
@@ -348,7 +367,7 @@ function getStatusText(status: string) {
           <input
             v-model="searchKeyword"
             type="text"
-            placeholder="搜索链接名称或原始URL"
+            placeholder="搜索名称、短链接或原始URL"
             class="input w-full sm:w-64"
             @keyup.enter="searchShortUrls"
           />
@@ -414,8 +433,8 @@ function getStatusText(status: string) {
                   {{ url.name }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
-                  <a :href="url.shortUrl" target="_blank" class="text-primary hover:underline">
-                    {{ url.shortUrl }}
+                  <a :href="url.shortUrl || ('http://localhost:8080/' + url.shortCode)" target="_blank" class="text-primary hover:underline">
+                    {{ url.shortUrl || ('http://localhost:8080/' + url.shortCode) }}
                   </a>
                 </td>
                 <td class="px-6 py-4 text-sm text-text-secondary max-w-xs truncate">

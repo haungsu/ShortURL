@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -124,33 +125,65 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
     List<Object[]> countByStatus();
 
     /**
-     * 根据短码或原链接模糊查询（分页）
+     * 根据短码、原链接或名称模糊查询（分页）
      */
-    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%")
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%') OR s.name LIKE CONCAT('%', :keyword, '%')")
+    Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingOrNameContaining(
+            @Param("keyword") String keyword, 
+            Pageable pageable);
+
+    /**
+     * 根据短码、原链接或名称模糊查询（不分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%') OR s.name LIKE CONCAT('%', :keyword, '%')")
+    List<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingOrNameContaining(
+            @Param("keyword") String keyword);
+
+    /**
+     * 根据短码或原链接模糊查询（分页） - 保留原有方法兼容性
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%')")
     Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContaining(
             @Param("keyword") String keyword, 
             Pageable pageable);
 
     /**
-     * 根据短码或原链接模糊查询（不分页）
+     * 根据短码或原链接模糊查询（不分页） - 保留原有方法兼容性
      */
-    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%")
+    @Query("SELECT s FROM ShortUrl s WHERE s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%')")
     List<ShortUrl> findByShortCodeContainingOrOriginalUrlContaining(
             @Param("keyword") String keyword);
 
     /**
-     * 根据短码或原链接模糊查询且状态筛选（分页）
+     * 根据短码、原链接或名称模糊查询且状态筛选（分页）
      */
-    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%) AND s.status = :status")
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%') OR s.name LIKE CONCAT('%', :keyword, '%')) AND s.status = :status")
+    Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingOrNameContainingAndStatus(
+            @Param("keyword") String keyword, 
+            @Param("status") ShortUrlStatus status, 
+            Pageable pageable);
+
+    /**
+     * 根据短码、原链接或名称模糊查询且状态筛选（不分页）
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%') OR s.name LIKE CONCAT('%', :keyword, '%')) AND s.status = :status")
+    List<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingOrNameContainingAndStatus(
+            @Param("keyword") String keyword, 
+            @Param("status") ShortUrlStatus status);
+
+    /**
+     * 根据短码或原链接模糊查询且状态筛选（分页） - 保留原有方法兼容性
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%')) AND s.status = :status")
     Page<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingAndStatus(
             @Param("keyword") String keyword, 
             @Param("status") ShortUrlStatus status, 
             Pageable pageable);
 
     /**
-     * 根据短码或原链接模糊查询且状态筛选（不分页）
+     * 根据短码或原链接模糊查询且状态筛选（不分页） - 保留原有方法兼容性
      */
-    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE %:keyword% OR s.originalUrl LIKE %:keyword%) AND s.status = :status")
+    @Query("SELECT s FROM ShortUrl s WHERE (s.shortCode LIKE CONCAT('%', :keyword, '%') OR s.originalUrl LIKE CONCAT('%', :keyword, '%')) AND s.status = :status")
     List<ShortUrl> findByShortCodeContainingOrOriginalUrlContainingAndStatus(
             @Param("keyword") String keyword, 
             @Param("status") ShortUrlStatus status);
@@ -164,10 +197,23 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
 
     /**
      * 根据日期范围统计点击次数
+     * 注意：由于click_count是累计值，这个方法实际上不能准确统计某一天的新增点击
+     * 这里保持原逻辑以兼容现有代码
      */
     @Query("SELECT COALESCE(SUM(s.clickCount), 0) FROM ShortUrl s WHERE s.createdAt BETWEEN :startDate AND :endDate")
     long sumClickCountsByDateRange(@Param("startDate") LocalDateTime startDate, 
                                   @Param("endDate") LocalDateTime endDate);
+    
+    /**
+     * 统计今日新增点击次数（基于创建时间的近似统计）
+     * 这个方法统计今天创建的所有短链接的总点击次数
+     */
+    default long getTodayClicksApproximate() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.atTime(23, 59, 59);
+        return sumClickCountsByDateRange(startOfDay, endOfDay);
+    }
 
     /**
      * 根据状态统计数量

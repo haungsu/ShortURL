@@ -2,8 +2,10 @@ package com.example.shorturlpro.controller;
 
 import com.example.shorturlpro.dto.ApiResponse;
 import com.example.shorturlpro.dto.ShortUrlCreateRequest;
+import com.example.shorturlpro.dto.ShortUrlResponse;
 import com.example.shorturlpro.dto.ShortUrlGenerateRequest;
 import com.example.shorturlpro.dto.ShortUrlGenerateResponse;
+import com.example.shorturlpro.dto.ShortUrlResponse;
 import com.example.shorturlpro.entity.ShortUrl;
 import com.example.shorturlpro.entity.ShortUrlStatus;
 import com.example.shorturlpro.entity.User;
@@ -197,6 +199,40 @@ public class ShortUrlController {
     }
 
     /**
+     * 更新短链接接口
+     * PUT /api/short-url/{id}
+     */
+    @PutMapping("/{id}")
+    @Operation(
+            summary = "更新短链接",
+            description = "根据ID更新短链接信息\n\n**权限要求**：需要认证"
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "更新成功")
+    public ResponseEntity<ApiResponse<ShortUrlResponse>> updateShortUrl(
+            @Parameter(description = "短链接ID") @PathVariable Long id,
+            @Valid @RequestBody ShortUrlCreateRequest request) {
+        
+        try {
+            log.info("收到更新短链接请求: id={}, name={}", id, request.getName());
+            
+            ShortUrl updatedShortUrl = shortUrlService.updateShortUrlByAdmin(id, request);
+            
+            log.info("短链接更新成功: id={}", id);
+            
+            return ResponseEntity.ok(ApiResponse.success(convertToResponseDto(updatedShortUrl)));
+            
+        } catch (RuntimeException e) {
+            log.warn("更新短链接失败: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("更新短链接失败: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("更新短链接失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("更新短链接失败: " + e.getMessage()));
+        }
+    }
+
+    /**
      * 更新短链接状态接口
      */
     @PatchMapping("/status/{id}")
@@ -232,7 +268,10 @@ public class ShortUrlController {
             shortUrlService.clearCache(shortUrl.getShortCode());
             
             log.info("短链接状态更新成功: id={}, status={}", id, status);
-            return ResponseEntity.ok().build();
+            
+            // 转换为响应DTO
+            ShortUrlResponse responseDto = convertToResponseDto(shortUrl);
+            return ResponseEntity.ok(ApiResponse.success(responseDto));
             
         } catch (IllegalArgumentException e) {
             log.warn("参数错误: {}", e.getMessage());
@@ -250,6 +289,33 @@ public class ShortUrlController {
             error.put("message", "服务器内部错误：" + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
+    }
+
+    /**
+     * 将 ShortUrl 实体转换为 ShortUrlResponse DTO
+     */
+    private ShortUrlResponse convertToResponseDto(ShortUrl shortUrl) {
+        ShortUrlResponse dto = new ShortUrlResponse();
+        dto.setId(shortUrl.getId());
+        dto.setName(shortUrl.getName());
+        dto.setShortCode(shortUrl.getShortCode());
+        dto.setShortUrl(getFullShortUrl(shortUrl.getShortCode()));
+        dto.setOriginalUrl(shortUrl.getOriginalUrl());
+        dto.setStatus(shortUrl.getStatus().name());
+        dto.setClickCount(shortUrl.getClickCount());
+        dto.setCreatedAt(shortUrl.getCreatedAt());
+        dto.setUpdatedAt(shortUrl.getUpdatedAt());
+        dto.setUserId(shortUrl.getUserId());
+        dto.setAppId(shortUrl.getAppId());
+        dto.setExpiresAt(shortUrl.getExpiresAt());
+        return dto;
+    }
+
+    /**
+     * 构造完整的短链接URL
+     */
+    private String getFullShortUrl(String shortCode) {
+        return "http://localhost:8080/" + shortCode;
     }
 
     /**

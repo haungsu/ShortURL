@@ -5,6 +5,8 @@ import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import java.time.LocalDateTime;
 import com.example.shorturlpro.entity.ShortUrlStatus;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
  * 管理员创建短链接请求DTO
@@ -34,6 +36,37 @@ public class ShortUrlCreateRequest {
      * 状态（ENABLED/DISABLED）
      */
     private ShortUrlStatus status;
+    
+    /**
+     * 用于接收字符串形式的状态值
+     */
+    private String statusString;
+    
+    /**
+     * 设置状态的setter方法，支持字符串输入
+     */
+    public void setStatus(String statusStr) {
+        if (statusStr != null) {
+            this.status = ShortUrlStatus.valueOf(statusStr.toUpperCase());
+        }
+    }
+    
+    /**
+     * 获取状态字符串表示
+     */
+    @JsonValue
+    public String getStatusString() {
+        return status != null ? status.name() : null;
+    }
+    
+    /**
+     * 从字符串创建枚举值
+     */
+    @JsonCreator
+    public static ShortUrlStatus fromString(String value) {
+        if (value == null) return null;
+        return ShortUrlStatus.valueOf(value.toUpperCase());
+    }
 
     /**
      * 应用标识（可选）

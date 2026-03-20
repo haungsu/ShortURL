@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +52,10 @@ public class AdminController {
 
     private final ShortUrlRepository shortUrlRepository;
     private final ShortUrlService shortUrlService;
+    
+    // 从配置中读取基础URL
+    @Value("${app.short-url.base-url:http://localhost:8080}")
+    private String baseUrl;
 
     /**
      * 获取统计信息（管理员权限）
@@ -77,11 +82,8 @@ public class AdminController {
             long totalClicks = shortUrlRepository.sumAllClickCounts();
             stats.put("totalClicks", totalClicks);
             
-            // 今日点击量
-            LocalDate today = LocalDate.now();
-            LocalDateTime startOfDay = today.atStartOfDay();
-            LocalDateTime endOfDay = today.atTime(23, 59, 59);
-            long todayClicks = shortUrlRepository.sumClickCountsByDateRange(startOfDay, endOfDay);
+            // 今日点击量（基于创建时间的近似统计）
+            long todayClicks = shortUrlRepository.getTodayClicksApproximate();
             stats.put("todayClicks", todayClicks);
             
             // 活跃链接数（启用状态的链接）
@@ -90,6 +92,7 @@ public class AdminController {
             
             log.info("统计信息查询完成: totalUrls={}, totalClicks={}, todayClicks={}, activeUrls={}", 
                     totalUrls, totalClicks, todayClicks, activeUrls);
+            log.info("今日点击量统计说明: 统计的是今天创建的短链接的总点击次数，而非今天的新增点击次数");
                         
             return ResponseEntity.ok(ApiResponse.success(stats));
             
@@ -114,13 +117,13 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Page<ShortUrlResponse>>> getAllShortUrls(
             @Parameter(description = "页码（从0开始）") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "每页大小") @RequestParam(defaultValue = "10") int size,
-            @Parameter(description = "搜索关键词") @RequestParam(required = false) String search,
+            @Parameter(description = "搜索关键词") @RequestParam(required = false) String keyword,
             @Parameter(description = "状态筛选") @RequestParam(required = false) String status,
             @Parameter(description = "排序字段") @RequestParam(defaultValue = "createdAt,desc") String sort) {
 
         try {
-            log.info("管理员查询短链接列表: page={}, size={}, search={}, status={}, sort={}", 
-                    page, size, search, status, sort);
+            log.info("管理员查询短链接列表: page={}, size={}, keyword={}, status={}, sort={}", 
+                    page, size, keyword, status, sort);
 
             // 解析排序参数
             String[] sortParts = sort.split(",");
@@ -131,14 +134,14 @@ public class AdminController {
             Pageable pageable = PageRequest.of(page, size, sortBy);
 
             Page<ShortUrl> shortUrlPage;
-            if (search != null && !search.trim().isEmpty()) {
+            if (keyword != null && !keyword.trim().isEmpty()) {
                 if (status != null && !status.trim().isEmpty()) {
                     ShortUrlStatus statusEnum = ShortUrlStatus.valueOf(status.toUpperCase());
-                    shortUrlPage = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingAndStatus(
-                            search, statusEnum, pageable);
+                    shortUrlPage = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingOrNameContainingAndStatus(
+                            keyword, statusEnum, pageable);
                 } else {
-                    shortUrlPage = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContaining(
-                            search, pageable);
+                    shortUrlPage = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingOrNameContaining(
+                            keyword, pageable);
                 }
             } else if (status != null && !status.trim().isEmpty()) {
                 ShortUrlStatus statusEnum = ShortUrlStatus.valueOf(status.toUpperCase());
@@ -298,10 +301,10 @@ public class AdminController {
             if (search != null && !search.trim().isEmpty()) {
                 if (status != null && !status.trim().isEmpty()) {
                     ShortUrlStatus statusEnum = ShortUrlStatus.valueOf(status.toUpperCase());
-                    shortUrls = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingAndStatus(
+                    shortUrls = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingOrNameContainingAndStatus(
                             search, statusEnum);
                 } else {
-                    shortUrls = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContaining(
+                    shortUrls = shortUrlRepository.findByShortCodeContainingOrOriginalUrlContainingOrNameContaining(
                             search);
                 }
             } else if (status != null && !status.trim().isEmpty()) {
@@ -387,6 +390,8 @@ public class AdminController {
         response.setId(shortUrl.getId());
         response.setName(shortUrl.getName());
         response.setShortCode(shortUrl.getShortCode());
+        // 构造完整的短链接URL
+        response.setShortUrl(baseUrl + "/" + shortUrl.getShortCode());
         response.setOriginalUrl(shortUrl.getOriginalUrl());
         response.setStatus(shortUrl.getStatus().name());
         response.setClickCount(shortUrl.getClickCount());
