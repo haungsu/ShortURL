@@ -22,7 +22,7 @@ services:
       timeout: 10s
       retries: 3
 
-  # Spring Boot应用
+  # Spring Boot 应用
   short-url-app:
     image: lattt/short-url-pro:0.0.1  # 或使用本地构建
     container_name: short-url-pro-dev
@@ -35,6 +35,8 @@ services:
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
       - SERVER_FORWARD_HEADERS_STRATEGY=NATIVE
+      # JVM 内存限制（开发环境）
+      - JAVA_OPTS=-Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
     depends_on:
       mysql:
         condition: service_healthy
@@ -44,6 +46,12 @@ services:
       - short-url-app-logs:/app/logs
     networks:
       - shorturl-network
+    # 容器资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
 
   # MySQL数据库
   mysql:

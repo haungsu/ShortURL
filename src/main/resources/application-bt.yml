@@ -15,14 +15,14 @@ spring:
   datasource:
     # 注意：请根据宝塔面板实际的MySQL配置修改以下参数
     url: jdbc:mysql://localhost:3306/shorturldb?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: short_url_db
-    password: zl123456
+    username: root  # 请修改为宝塔面板MySQL的实际用户名
+    password:       # 请修改为宝塔面板MySQL的实际密码
     driver-class-name: com.mysql.cj.jdbc.Driver
     
     # 连接池配置
     hikari:
-      minimum-idle: 5
-      maximum-pool-size: 20
+      minimum-idle: 2
+      maximum-pool-size: 10
       idle-timeout: 300000
       max-lifetime: 600000
       connection-timeout: 30000

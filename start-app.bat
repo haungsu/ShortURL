@@ -43,9 +43,20 @@ if %errorlevel% neq 0 (
     )
 )
 
+REM 设置 JVM 内存参数（根据实际物理内存调整）
+REM 推荐配置：
+REM   - 2GB 以下内存：-Xms256m -Xmx512m
+REM   - 2-4GB 内存：-Xms512m -Xmx1g
+REM   - 4-8GB 内存：-Xms1g -Xmx2g
+REM   - 8GB 以上内存：-Xms2g -Xmx4g
+set JAVA_OPTS=-Xms512m -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=256m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=logs/heapdump.hprof
+
+echo JVM 内存配置：%JAVA_OPTS%
+echo.
+
 REM 启动后端服务
 echo 启动后端服务...
-start "ShortURLPro Backend" cmd /k "cd /d %~dp0 && mvn spring-boot:run"
+start "ShortURLPro Backend" cmd /k "cd /d %~dp0 && set MAVEN_OPTS=%JAVA_OPTS% && mvn spring-boot:run"
 
 REM 等待后端启动
 timeout /t 10 /nobreak >nul
