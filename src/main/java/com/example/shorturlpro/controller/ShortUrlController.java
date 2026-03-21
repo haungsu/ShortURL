@@ -12,6 +12,7 @@ import com.example.shorturlpro.entity.User;
 import com.example.shorturlpro.repository.ShortUrlRepository;
 import com.example.shorturlpro.repository.UserRepository;
 import com.example.shorturlpro.service.ShortUrlService;
+import com.example.shorturlpro.util.LogUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -67,9 +68,14 @@ public class ShortUrlController {
     public ResponseEntity<ApiResponse<ShortUrlGenerateResponse>> generateShortUrl(
             @Valid @RequestBody ShortUrlGenerateRequest request) {
 
+        long startTime = System.currentTimeMillis();
+        String operation = "API_SHORT_URL_GENERATE";
+        
         try {
+            LogUtil.setOperation(operation);
+            
             // 获取当前登录用户信息
-            String username = "none";
+            String username = "anonymous";
             String role = "none";
             Long userId = null;
 
@@ -78,44 +84,64 @@ public class ShortUrlController {
                     && !(authentication.getPrincipal() instanceof String)) {
                 // 已登录：获取用户名、角色
                 UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-                final String loginUsername = userDetails.getUsername(); // 声明为final
-                username = loginUsername; // 赋值给原变量（不影响）
+                final String loginUsername = userDetails.getUsername();
+                username = loginUsername;
                 role = userDetails.getAuthorities().iterator().next().getAuthority();
 
                 // 通过username查询User实体，获取真实userId
                 User loginUser = userRepository.findByUsername(username)
                         .orElseThrow(() -> new RuntimeException("登录用户不存在：" + loginUsername));
-                userId = loginUser.getId(); // 拿到用户的真实ID
+                userId = loginUser.getId();
 
                 log.info("当前登录用户：{}（ID：{}），角色：{}", username, userId, role);
+                LogUtil.setUserContext(userId, username);
             } else {
                 log.info("未登录用户生成短链接（匿名用户）");
+                LogUtil.setUserContext(null, "anonymous");
             }
 
             log.info("收到短链接生成请求: {}，用户ID：{}，用户名：{}，角色：{}",
                     request.getOriginalUrl(), userId, username, role);
+            LogUtil.logBusiness(operation, String.format(
+                "收到生成请求，原始链接=%s, 用户ID=%s, 用户名=%s", 
+                request.getOriginalUrl(), userId, username));
 
             // 传递userId到服务层
             ShortUrlGenerateResponse response = shortUrlService.generateShortUrl(request, userId);
+            long duration = System.currentTimeMillis() - startTime;
 
-            log.info("短链接生成成功: {} -> {}，用户ID：{}，用户名：{}",
-                    response.getShortCode(), response.getShortUrl(), userId, username);
+            log.info("短链接生成成功: {} -> {}，用户ID：{}，用户名：{}，耗时：{}ms",
+                    response.getShortCode(), response.getShortUrl(), userId, username, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "生成成功，短码=%s, 短链接=%s, 用户ID=%s, 用户名=%s, 耗时=%dms", 
+                response.getShortCode(), response.getShortUrl(), userId, username, duration));
             
             return ResponseEntity.ok(ApiResponse.success(response));
 
         } catch (IllegalArgumentException e) {
-            log.warn("参数校验失败: {}", e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.warn("参数校验失败: {}，耗时：{}ms", e.getMessage(), duration);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "参数校验失败，原始链接=%s, 错误=%s, 耗时=%dms", 
+                request.getOriginalUrl(), e.getMessage(), duration), e);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.badRequest(e.getMessage()));
 
-            // 捕获用户不存在的异常
         } catch (RuntimeException e) {
-            log.warn("用户信息异常: {}", e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.warn("用户信息异常: {}，耗时：{}ms", e.getMessage(), duration);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "用户信息异常，原始链接=%s, 错误=%s, 耗时=%dms", 
+                request.getOriginalUrl(), e.getMessage(), duration), e);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.unauthorized(e.getMessage()));
 
         } catch (Exception e) {
-            log.error("生成短链接失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("生成短链接失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "生成失败，原始链接=%s, 耗时=%dms", 
+                request.getOriginalUrl(), duration), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("生成短链接失败: " + e.getMessage()));
         }
@@ -136,18 +162,32 @@ public class ShortUrlController {
             @Parameter(description = "短链接码", example = "abc123xyz")
             @PathVariable String shortCode) {
 
+        long startTime = System.currentTimeMillis();
+        String operation = "API_SHORT_URL_REDIRECT";
+        
         try {
+            LogUtil.setOperation(operation);
+            LogUtil.setUserContext(null, "visitor");
+            
             log.info("收到短链接跳转请求: {}", shortCode);
+            LogUtil.logBusiness(operation, String.format("收到跳转请求，短码=%s", shortCode));
 
             String originalUrl = shortUrlService.getOriginalUrlAndIncrement(shortCode);
+            long duration = System.currentTimeMillis() - startTime;
 
-            log.info("短链接跳转成功: {} -> {}", shortCode, originalUrl);
+            log.info("短链接跳转成功: {} -> {}，耗时：{}ms", shortCode, originalUrl, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "跳转成功，短码=%s, 原始链接=%s, 耗时=%dms", shortCode, originalUrl, duration));
+            
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(originalUrl))
                     .build();
 
         } catch (RuntimeException e) {
-            log.warn("短链接跳转失败: {}, 原因: {}", shortCode, e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.warn("短链接跳转失败: {}, 原因: {}，耗时：{}ms", shortCode, e.getMessage(), duration);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "跳转失败，短码=%s, 错误=%s, 耗时=%dms", shortCode, e.getMessage(), duration), e);
             return ResponseEntity.notFound().build();
         }
     }
@@ -313,9 +353,17 @@ public class ShortUrlController {
 
     /**
      * 构造完整的短链接URL
+     * 使用Service层的动态域名解析机制
      */
     private String getFullShortUrl(String shortCode) {
-        return "http://localhost:8080/" + shortCode;
+        // 使用Service层的动态域名解析，适配不同部署环境
+        try {
+            String dynamicDomain = shortUrlService.getDynamicAppDomain();
+            return dynamicDomain + "/" + shortCode;
+        } catch (Exception e) {
+            log.warn("无法获取动态域名，使用默认配置", e);
+            return "http://localhost:8080/" + shortCode;
+        }
     }
 
     /**

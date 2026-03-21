@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- 控制台输出格式 -->
+    <property name="CONSOLE_LOG_PATTERN" 
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [%thread] %logger{36} [%X{requestId}] - %msg%n" />
+    
+    <!-- 彩色控制台输出 -->
+    <conversionRule conversionWord="highlight" 
+                   converterClass="org.springframework.boot.logging.logback.ColorConverter" />
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+
+
+
+
+    <!-- 访问日志记录器 -->
+    <logger name="access" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- 业务日志记录器 -->
+    <logger name="business" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- 根日志配置 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+
+    <!-- 开发环境配置 -->
+    <springProfile name="dev">
+        <logger name="com.example.shorturlpro" level="DEBUG" />
+        <logger name="org.springframework.web" level="DEBUG" />
+        <logger name="org.hibernate.SQL" level="DEBUG" />
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE" />
+    </springProfile>
+
+    <!-- 生产环境配置 -->
+    <springProfile name="prod">
+        <logger name="com.example.shorturlpro" level="INFO" />
+        <logger name="org.springframework.web" level="WARN" />
+        <logger name="access" level="INFO" />
+        <logger name="business" level="INFO" />
+    </springProfile>
+
+</configuration>

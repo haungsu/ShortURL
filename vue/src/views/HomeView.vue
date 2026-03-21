@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { shortUrlApi } from '@/api/shorturl'
+import { copyToClipboard } from '@/utils/helpers'
 
 interface GenerateForm {
   originalUrl: string
@@ -19,6 +20,7 @@ const loading = ref(false)
 const showResult = ref(false)
 const generatedUrl = ref('')
 const shortCode = ref('')
+const shouldClearInput = ref(false) // 标记是否应该在下次输入时清空
 
 const isFormValid = computed(() => {
   return form.value.originalUrl.trim() !== '' && 
@@ -31,6 +33,14 @@ function isValidUrl(string: string): boolean {
     return true
   } catch (_) {
     return false
+  }
+}
+
+function handleInputFocus() {
+  // 如果标记了需要清空，则清空输入框
+  if (shouldClearInput.value) {
+    form.value.originalUrl = ''
+    shouldClearInput.value = false
   }
 }
 
@@ -63,8 +73,8 @@ async function generateShortUrl() {
     shortCode.value = response.shortCode
     showResult.value = true
     
-    // 清空表单
-    form.value.originalUrl = ''
+    // 标记下次输入时需要清空
+    shouldClearInput.value = true
   } catch (error: any) {
     console.error('生成短链接失败:', error);
     alert(`生成失败: ${error.message || '未知错误'}`)
@@ -73,21 +83,19 @@ async function generateShortUrl() {
   }
 }
 
-function copyToClipboard() {
-  navigator.clipboard.writeText(generatedUrl.value)
-    .then(() => {
+async function handleCopyToClipboard() {
+  try {
+    const success = await copyToClipboard(generatedUrl.value)
+    if (success) {
       alert('已复制到剪贴板!')
-    })
-    .catch(() => {
-      // 降级方案
-      const textArea = document.createElement('textarea')
-      textArea.value = generatedUrl.value
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
-      alert('已复制到剪贴板!')
-    })
+    } else {
+      // 如果工具函数返回false，给出更友好的提示
+      prompt('复制可能失败，请手动复制以下内容:', generatedUrl.value)
+    }
+  } catch (error) {
+    console.error('复制过程中发生错误:', error)
+    prompt('复制失败，请手动复制以下内容:', generatedUrl.value)
+  }
 }
 
 function handleLogin() {
@@ -160,6 +168,7 @@ function handleLogout() {
             placeholder="https://example.com/very-long-url-that-needs-shortening"
             class="input"
             :disabled="loading"
+            @focus="handleInputFocus"
           />
         </div>
         
@@ -187,7 +196,7 @@ function handleLogout() {
             </p>
           </div>
           <button
-            @click="copyToClipboard"
+            @click="handleCopyToClipboard"
             class="ml-4 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm transition-colors"
           >
             复制

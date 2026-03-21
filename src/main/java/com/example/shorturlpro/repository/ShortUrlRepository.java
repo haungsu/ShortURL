@@ -220,4 +220,11 @@ public interface ShortUrlRepository extends JpaRepository<ShortUrl, Long> {
      */
     @Query("SELECT COUNT(s) FROM ShortUrl s WHERE s.status = :status")
     long countByStatus(@Param("status") ShortUrlStatus status);
+
+    /**
+     * 查询指定时间之前且状态为启用的短链接
+     */
+    @Query("SELECT s FROM ShortUrl s WHERE s.expiresAt < :currentTime AND s.status = :status")
+    List<ShortUrl> findByExpiresAtBeforeAndStatus(@Param("currentTime") LocalDateTime currentTime, 
+                                                  @Param("status") ShortUrlStatus status);
 }

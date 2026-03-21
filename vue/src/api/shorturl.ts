@@ -33,7 +33,7 @@ export interface ShortUrlResponse {
   updatedAt: string
   userId?: number
   appId?: string
-  expiresAt?: string
+  expiresAt?: string | null
 }
 
 interface ShortUrlListResponse {
@@ -174,6 +174,28 @@ export const shortUrlApi = {
       .then(response => {
         if (response.code !== 200) {
           throw new Error(response.message || '切换状态失败');
+        }
+        return response.data;
+      })
+  },
+
+  // 设置过期时间
+  setExpireTime(id: number, data: { expiresAt: string | null }): Promise<ShortUrlResponse> {
+    return httpClient.put<ShortUrlResponse>(`/api/short-url/admin/${id}/expire`, data)
+      .then(response => {
+        if (response.code !== 200) {
+          throw new Error(response.message || '设置过期时间失败');
+        }
+        return response.data;
+      })
+  },
+
+  // 清理过期链接
+  cleanupExpired(): Promise<{ deletedCount: number; message: string }> {
+    return httpClient.post<any>('/api/short-url/admin/cleanup-expired')
+      .then(response => {
+        if (response.code !== 200) {
+          throw new Error(response.message || '清理过期链接失败');
         }
         return response.data;
       })

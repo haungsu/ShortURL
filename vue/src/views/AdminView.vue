@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { shortUrlApi, type ShortUrlResponse, type ShortUrlStats } from '@/api/shorturl'
 import { authApi } from '@/api/auth'
+import { copyToClipboard } from '@/utils/helpers'
 
 interface CreateForm {
   name: string
   originalUrl: string
   status: 'ENABLED' | 'DISABLED'
+  expiresAt?: string  // 过期时间
 }
 
 const router = useRouter()
@@ -37,7 +39,15 @@ const sortOrder = ref('createdAt,desc')
 // 模态框状态
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
+const showExpireTimeModal = ref(false)
 const editingUrl = ref<ShortUrlResponse | null>(null)
+const expireTimeForm = ref({
+  date: '',
+  time: ''
+})
+
+// 输入清空标记
+const shouldClearCreateInput = ref(false)
 
 // 表单数据
 const createForm = ref<CreateForm>({
@@ -49,7 +59,8 @@ const createForm = ref<CreateForm>({
 const editForm = ref<CreateForm>({
   name: '',
   originalUrl: '',
-  status: 'ENABLED'
+  status: 'ENABLED',
+  expiresAt: ''
 })
 
 onMounted(async () => {
@@ -217,14 +228,29 @@ function showCreateForm() {
   createForm.value = {
     name: '',
     originalUrl: '',
-    status: 'ENABLED'
+    status: 'ENABLED',
+    expiresAt: ''
   }
+  shouldClearCreateInput.value = false // 重置清空标记
   showCreateModal.value = true
+}
+
+function handleCreateInputFocus() {
+  // 如果标记了需要清空，则清空输入框
+  if (shouldClearCreateInput.value) {
+    createForm.value.originalUrl = ''
+    shouldClearCreateInput.value = false
+  }
 }
 
 async function createShortUrl() {
   try {
-    await shortUrlApi.create(createForm.value)
+    const requestData = {...createForm.value};
+    // 如果设置了过期时间，则转换为正确的格式
+    if (requestData.expiresAt) {
+      requestData.expiresAt = new Date(requestData.expiresAt).toISOString();
+    }
+    await shortUrlApi.create(requestData)
     showCreateModal.value = false
     await loadStats()
     await loadShortUrls()
@@ -238,7 +264,8 @@ function showEditForm(url: ShortUrlResponse) {
   editForm.value = {
     name: url.name,
     originalUrl: url.originalUrl,
-    status: url.status
+    status: url.status,
+    expiresAt: url.expiresAt ? new Date(url.expiresAt).toISOString().slice(0, 16) : ''
   }
   showEditModal.value = true
 }
@@ -247,7 +274,12 @@ async function saveChanges() {
   if (!editingUrl.value) return
   
   try {
-    await shortUrlApi.update(editingUrl.value.id, editForm.value)
+    const requestData = {...editForm.value};
+    // 如果设置了过期时间，则转换为正确的格式
+    if (requestData.expiresAt) {
+      requestData.expiresAt = new Date(requestData.expiresAt).toISOString();
+    }
+    await shortUrlApi.update(editingUrl.value.id, requestData)
     showEditModal.value = false
     editingUrl.value = null
     await loadShortUrls()
@@ -279,8 +311,110 @@ async function deleteShortUrl(url: ShortUrlResponse) {
   }
 }
 
+// 设置过期时间
+function showExpireTimeModalFn(url: ShortUrlResponse) {
+  editingUrl.value = url;
+  
+  // 如果已有过期时间，初始化表单
+  if (url.expiresAt) {
+    const dateObj = new Date(url.expiresAt);
+    expireTimeForm.value.date = dateObj.toISOString().split('T')[0];
+    expireTimeForm.value.time = dateObj.toTimeString().slice(0, 5);
+  } else {
+    // 默认设置为明天同一时间
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    expireTimeForm.value.date = tomorrow.toISOString().split('T')[0];
+    expireTimeForm.value.time = tomorrow.toTimeString().slice(0, 5);
+  }
+  
+  showExpireTimeModal.value = true;
+}
+
+async function saveExpireTime() {
+  if (!editingUrl.value) return;
+  
+  try {
+    // 验证日期时间
+    const dateTimeString = `${expireTimeForm.value.date}T${expireTimeForm.value.time}`;
+    const selectedDate = new Date(dateTimeString);
+    
+    if (isNaN(selectedDate.getTime())) {
+      alert('请选择有效的日期和时间');
+      return;
+    }
+    
+    if (selectedDate <= new Date()) {
+      alert('过期时间必须晚于当前时间');
+      return;
+    }
+    
+    const expiresAt = selectedDate.toISOString();
+    await shortUrlApi.setExpireTime(editingUrl.value.id, { expiresAt });
+    
+    showExpireTimeModal.value = false;
+    await loadShortUrls();
+    alert('过期时间设置成功');
+  } catch (error: any) {
+    alert(`设置失败: ${error.message}`);
+  }
+}
+
+async function clearExpireTime() {
+  if (!editingUrl.value) return;
+  
+  if (!confirm('确定要清除该链接的过期时间吗？')) return;
+  
+  try {
+    await shortUrlApi.setExpireTime(editingUrl.value.id, { expiresAt: null });
+    showExpireTimeModal.value = false;
+    await loadShortUrls();
+    alert('过期时间已清除');
+  } catch (error: any) {
+    alert(`清除失败: ${error.message}`);
+  }
+}
+
+// 保持原有的函数名用于兼容性
+const setExpireTime = showExpireTimeModalFn;
+
+// 清理过期链接
+async function cleanupExpiredUrls() {
+  if (!confirm('确定要清理所有已过期的链接吗？此操作不可恢复！')) return;
+  
+  try {
+    const response = await shortUrlApi.cleanupExpired();
+    const deletedCount = response.deletedCount || 0;
+    alert(`清理完成，共删除 ${deletedCount} 条过期链接`);
+    await loadStats();
+    await loadShortUrls();
+  } catch (error: any) {
+    alert(`清理失败: ${error.message}`);
+  }
+}
+
+async function copyShortUrl(url: ShortUrlResponse) {
+  try {
+    const shortUrl = url.shortUrl || (getCurrentDomain() + '/' + url.shortCode);
+    const success = await copyToClipboard(shortUrl);
+    if (success) {
+      alert('已复制到剪贴板!');
+    } else {
+      prompt('复制可能失败，请手动复制以下内容:', shortUrl);
+    }
+  } catch (error) {
+    console.error('复制过程中发生错误:', error);
+    prompt('复制失败，请手动复制以下内容:', url.shortUrl || (getCurrentDomain() + '/' + url.shortCode));
+  }
+}
+
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString('zh-CN')
+}
+
+function getCurrentDomain(): string {
+  // 获取当前页面的域名
+  return window.location.origin
 }
 
 function getStatusBadge(status: string) {
@@ -289,6 +423,27 @@ function getStatusBadge(status: string) {
 
 function getStatusText(status: string) {
   return status === 'ENABLED' ? '启用' : '禁用'
+}
+
+// 检查链接是否已过期
+function isExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt) < new Date();
+}
+
+// 获取过期状态文本
+function getExpireStatus(expiresAt: string | null | undefined): string {
+  if (!expiresAt) return '永久有效';
+  const expireDate = new Date(expiresAt);
+  const now = new Date();
+  if (expireDate < now) return '已过期';
+  return '未过期';
+}
+
+// 获取过期状态样式
+function getExpireStatusClass(expiresAt: string | null | undefined): string {
+  if (!expiresAt) return 'badge-success';
+  return isExpired(expiresAt) ? 'badge-error' : 'badge-warning';
 }
 </script>
 
@@ -380,6 +535,12 @@ function getStatusText(status: string) {
             <option value="ENABLED">启用</option>
             <option value="DISABLED">禁用</option>
           </select>
+          <button
+            @click="cleanupExpiredUrls"
+            class="btn btn-warning"
+          >
+            清理过期链接
+          </button>
         </div>
         <div class="flex gap-2">
           <button
@@ -422,6 +583,7 @@ function getStatusText(status: string) {
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">短链接</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">原始链接</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">过期时间</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">点击量</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">创建时间</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">操作</th>
@@ -433,8 +595,8 @@ function getStatusText(status: string) {
                   {{ url.name }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-text-secondary">
-                  <a :href="url.shortUrl || ('http://localhost:8080/' + url.shortCode)" target="_blank" class="text-primary hover:underline">
-                    {{ url.shortUrl || ('http://localhost:8080/' + url.shortCode) }}
+                  <a :href="url.shortUrl || (getCurrentDomain() + '/' + url.shortCode)" target="_blank" class="text-primary hover:underline">
+                    {{ url.shortUrl || (getCurrentDomain() + '/' + url.shortCode) }}
                   </a>
                 </td>
                 <td class="px-6 py-4 text-sm text-text-secondary max-w-xs truncate">
@@ -445,6 +607,14 @@ function getStatusText(status: string) {
                     {{ getStatusText(url.status) }}
                   </span>
                 </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span :class="['badge', getExpireStatusClass(url.expiresAt)]">
+                    {{ getExpireStatus(url.expiresAt) }}
+                  </span>
+                  <div v-if="url.expiresAt" class="text-xs text-text-secondary mt-1">
+                    {{ new Date(url.expiresAt).toLocaleString('zh-CN') }}
+                  </div>
+                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-text-primary">
                   {{ url.clickCount }}
                 </td>
@@ -452,6 +622,18 @@ function getStatusText(status: string) {
                   {{ formatDate(url.createdAt) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                  <button
+                    @click="copyShortUrl(url)"
+                    class="text-info hover:text-blue-600 mr-3"
+                  >
+                    复制
+                  </button>
+                  <button
+                    @click="setExpireTime(url)"
+                    class="text-info hover:text-blue-600 mr-3"
+                  >
+                    过期时间
+                  </button>
                   <button
                     @click="toggleStatus(url)"
                     :class="url.status === 'ENABLED' ? 'text-warning hover:text-orange-600' : 'text-success hover:text-green-600'"
@@ -526,6 +708,7 @@ function getStatusText(status: string) {
                 required
                 class="input"
                 placeholder="https://example.com"
+                @focus="handleCreateInputFocus"
               />
             </div>
             <div>
@@ -534,6 +717,15 @@ function getStatusText(status: string) {
                 <option value="ENABLED">启用</option>
                 <option value="DISABLED">禁用</option>
               </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">过期时间（可选）</label>
+              <input
+                v-model="createForm.expiresAt"
+                type="datetime-local"
+                class="input"
+              />
+              <p class="text-xs text-text-secondary mt-1">留空表示永久有效</p>
             </div>
             <div class="flex justify-end space-x-3 pt-4">
               <button
@@ -586,6 +778,15 @@ function getStatusText(status: string) {
                 <option value="DISABLED">禁用</option>
               </select>
             </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">过期时间（可选）</label>
+              <input
+                v-model="editForm.expiresAt"
+                type="datetime-local"
+                class="input"
+              />
+              <p class="text-xs text-text-secondary mt-1">留空表示永久有效</p>
+            </div>
             <div class="flex justify-end space-x-3 pt-4">
               <button
                 type="button"
@@ -599,6 +800,79 @@ function getStatusText(status: string) {
                 class="btn btn-primary"
               >
                 保存
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置过期时间模态框 -->
+    <div v-if="showExpireTimeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white dark:bg-surface rounded-lg shadow-xl max-w-md w-full">
+        <div class="p-6">
+          <h3 class="text-lg font-medium text-text-primary mb-4">设置过期时间</h3>
+          <div v-if="editingUrl" class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <p class="text-sm text-text-primary">
+              <span class="font-medium">短链接：</span>{{ editingUrl.shortUrl }}
+            </p>
+            <p class="text-sm text-text-primary mt-1">
+              <span class="font-medium">当前状态：</span>
+              <span :class="editingUrl.status === 'ENABLED' ? 'text-success' : 'text-gray-500'">
+                {{ editingUrl.status === 'ENABLED' ? '启用' : '禁用' }}
+              </span>
+            </p>
+            <p v-if="editingUrl.expiresAt" class="text-sm text-text-primary mt-1">
+              <span class="font-medium">当前过期时间：</span>
+              {{ new Date(editingUrl.expiresAt).toLocaleString('zh-CN') }}
+            </p>
+          </div>
+          <form @submit.prevent="saveExpireTime" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">选择日期</label>
+              <input
+                v-model="expireTimeForm.date"
+                type="date"
+                required
+                :min="new Date().toISOString().split('T')[0]"
+                class="input w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-text-primary mb-1">选择时间</label>
+              <input
+                v-model="expireTimeForm.time"
+                type="time"
+                required
+                class="input w-full"
+              />
+            </div>
+            <div class="text-sm text-text-secondary">
+              <p>• 请选择未来的日期和时间作为过期时间</p>
+              <p>• 过期后链接将自动失效</p>
+              <p v-if="editingUrl?.expiresAt">• 留空可清除当前过期时间</p>
+            </div>
+            <div class="flex justify-end space-x-3 pt-4">
+              <button
+                v-if="editingUrl?.expiresAt"
+                type="button"
+                @click="clearExpireTime"
+                class="btn btn-secondary"
+              >
+                清除过期时间
+              </button>
+              <button
+                type="button"
+                @click="showExpireTimeModal = false"
+                class="btn btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+              >
+                设置过期时间
               </button>
             </div>
           </form>

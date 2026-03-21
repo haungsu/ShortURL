@@ -7,6 +7,7 @@ import com.example.shorturlpro.entity.ShortUrl;
 import com.example.shorturlpro.entity.ShortUrlStatus;
 import com.example.shorturlpro.repository.ShortUrlRepository;
 import com.example.shorturlpro.service.ShortUrlService;
+import com.example.shorturlpro.util.LogUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +30,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
@@ -52,10 +57,6 @@ public class AdminController {
 
     private final ShortUrlRepository shortUrlRepository;
     private final ShortUrlService shortUrlService;
-    
-    // 从配置中读取基础URL
-    @Value("${app.short-url.base-url:http://localhost:8080}")
-    private String baseUrl;
 
     /**
      * 获取统计信息（管理员权限）
@@ -175,18 +176,39 @@ public class AdminController {
             content = @Content(mediaType = "application/json",
                     schema = @Schema(implementation = ShortUrlResponse.class)))
     public ResponseEntity<ApiResponse<ShortUrlResponse>> createShortUrl(@Valid @RequestBody ShortUrlCreateRequest request) {
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_API_CREATE_SHORT_URL";
+        
         try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
             log.info("管理员创建短链接: name={}, originalUrl={}", request.getName(), request.getOriginalUrl());
+            LogUtil.logBusiness(operation, String.format(
+                "管理员创建短链接，名称=%s, 原始链接=%s, 管理员=%s", 
+                request.getName(), request.getOriginalUrl(), adminUsername));
             
             ShortUrl shortUrl = shortUrlService.createShortUrlByAdmin(request);
             ShortUrlResponse response = convertToResponse(shortUrl);
+            long duration = System.currentTimeMillis() - startTime;
             
-            log.info("短链接创建成功: id={}, shortCode={}", shortUrl.getId(), shortUrl.getShortCode());
+            log.info("短链接创建成功: id={}, shortCode={}，耗时：{}ms", shortUrl.getId(), shortUrl.getShortCode(), duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "创建成功，ID=%d, 短码=%s, 名称=%s, 原始链接=%s, 管理员=%s, 耗时=%dms", 
+                shortUrl.getId(), shortUrl.getShortCode(), request.getName(), 
+                request.getOriginalUrl(), adminUsername, duration));
             
             return ResponseEntity.ok(ApiResponse.success(response));
             
         } catch (Exception e) {
-            log.error("创建短链接失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("创建短链接失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "创建失败，名称=%s, 原始链接=%s, 耗时=%dms", 
+                request.getName(), request.getOriginalUrl(), duration), e);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.badRequest("创建短链接失败: " + e.getMessage()));
         }
@@ -205,21 +227,44 @@ public class AdminController {
             @Parameter(description = "短链接ID") @PathVariable Long id,
             @Valid @RequestBody ShortUrlCreateRequest request) {
         
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_API_UPDATE_SHORT_URL";
+        
         try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
             log.info("管理员更新短链接: id={}, name={}", id, request.getName());
+            LogUtil.logBusiness(operation, String.format(
+                "管理员更新短链接，ID=%d, 名称=%s, 管理员=%s", id, request.getName(), adminUsername));
             
             ShortUrl updatedShortUrl = shortUrlService.updateShortUrlByAdmin(id, request);
+            long duration = System.currentTimeMillis() - startTime;
             
-            log.info("短链接更新成功: id={}", id);
+            log.info("短链接更新成功: id={}，耗时：{}ms", id, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "更新成功，ID=%d, 短码=%s, 名称=%s, 管理员=%s, 耗时=%dms", 
+                id, updatedShortUrl.getShortCode(), request.getName(), adminUsername, duration));
             
             return ResponseEntity.ok(ApiResponse.success(convertToResponse(updatedShortUrl)));
             
         } catch (RuntimeException e) {
-            log.warn("更新短链接失败: {}", e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.warn("更新短链接失败: {}，耗时：{}ms", e.getMessage(), duration);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "更新失败，ID=%d, 名称=%s, 错误=%s, 耗时=%dms", 
+                id, request.getName(), e.getMessage(), duration), e);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.badRequest("更新短链接失败: " + e.getMessage()));
         } catch (Exception e) {
-            log.error("更新短链接失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("更新短链接失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "更新失败，ID=%d, 名称=%s, 耗时=%dms", 
+                id, request.getName(), duration), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("更新短链接失败: " + e.getMessage()));
         }
@@ -237,20 +282,41 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Object>> deleteShortUrl(
             @Parameter(description = "短链接ID") @PathVariable Long id) {
         
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_API_DELETE_SHORT_URL";
+        
         try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
             log.info("管理员删除短链接: id={}", id);
+            LogUtil.logBusiness(operation, String.format(
+                "管理员删除短链接，ID=%d, 管理员=%s", id, adminUsername));
             
             shortUrlService.deleteShortUrlByAdmin(id);
+            long duration = System.currentTimeMillis() - startTime;
             
-            log.info("短链接删除成功: id={}", id);
+            log.info("短链接删除成功: id={}，耗时：{}ms", id, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "删除成功，ID=%d, 管理员=%s, 耗时=%dms", id, adminUsername, duration));
+            
             return ResponseEntity.ok(ApiResponse.success("删除成功", null));
             
         } catch (RuntimeException e) {
-            log.warn("删除短链接失败: {}", e.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.warn("删除短链接失败: {}，耗时：{}ms", e.getMessage(), duration);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "删除失败，ID=%d, 错误=%s, 耗时=%dms", id, e.getMessage(), duration), e);
             return ResponseEntity.badRequest()
                     .body(ApiResponse.badRequest("删除短链接失败: " + e.getMessage()));
         } catch (Exception e) {
-            log.error("删除短链接失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("删除短链接失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "删除失败，ID=%d, 耗时=%dms", id, duration), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("删除短链接失败: " + e.getMessage()));
         }
@@ -266,16 +332,35 @@ public class AdminController {
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "批量删除成功")
     public ResponseEntity<ApiResponse<Object>> batchDeleteShortUrls(@RequestBody List<Long> ids) {
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_API_BATCH_DELETE_SHORT_URL";
+        
         try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
             log.info("管理员批量删除短链接: ids={}", ids);
+            LogUtil.logBusiness(operation, String.format(
+                "管理员批量删除短链接，IDs数量=%d, 管理员=%s", ids.size(), adminUsername));
             
             shortUrlService.batchDeleteShortUrlsByAdmin(ids);
+            long duration = System.currentTimeMillis() - startTime;
             
-            log.info("批量删除成功，共删除 {} 条记录", ids.size());
+            log.info("批量删除成功，共删除 {} 条记录，耗时：{}ms", ids.size(), duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "批量删除成功，删除数量=%d, IDs=%s, 管理员=%s, 耗时=%dms", 
+                ids.size(), ids, adminUsername, duration));
+            
             return ResponseEntity.ok(ApiResponse.success("批量删除成功，共删除 " + ids.size() + " 条记录", null));
             
         } catch (Exception e) {
-            log.error("批量删除失败", e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("批量删除失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "批量删除失败，IDs数量=%d, 耗时=%dms", ids.size(), duration), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("批量删除失败: " + e.getMessage()));
         }
@@ -384,14 +469,22 @@ public class AdminController {
 
     /**
      * 转换实体为响应DTO
+     * 使用动态域名生成短链接，避免硬编码问题
+     */
+    /**
+     * 转换实体为响应DTO
+     * 使用动态域名生成短链接，避免硬编码问题
      */
     private ShortUrlResponse convertToResponse(ShortUrl shortUrl) {
         ShortUrlResponse response = new ShortUrlResponse();
         response.setId(shortUrl.getId());
         response.setName(shortUrl.getName());
         response.setShortCode(shortUrl.getShortCode());
-        // 构造完整的短链接URL
-        response.setShortUrl(baseUrl + "/" + shortUrl.getShortCode());
+        
+        // 使用动态域名生成完整的短链接URL
+        String dynamicDomain = shortUrlService.getDynamicAppDomain();
+        response.setShortUrl(dynamicDomain + "/" + shortUrl.getShortCode());
+        
         response.setOriginalUrl(shortUrl.getOriginalUrl());
         response.setStatus(shortUrl.getStatus().name());
         response.setClickCount(shortUrl.getClickCount());
@@ -401,5 +494,140 @@ public class AdminController {
         response.setCreatedAt(shortUrl.getCreatedAt());
         response.setUpdatedAt(shortUrl.getUpdatedAt());
         return response;
+    }
+
+    /**
+     * 设置短链接过期时间
+     */
+    @PutMapping("/{id}/expire")
+    @Operation(
+            summary = "设置短链接过期时间",
+            description = "管理员设置短链接的过期时间\n\n**权限要求**：ROLE_ADMIN"
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "设置成功")
+    public ResponseEntity<ApiResponse<ShortUrlResponse>> setExpireTime(
+            @Parameter(description = "短链接ID") @PathVariable Long id,
+            @Parameter(description = "过期时间(ISO格式)") @RequestBody Map<String, String> requestBody) {
+        
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_SET_EXPIRE_TIME";
+        
+        try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
+            String expireTimeString = requestBody.get("expiresAt");
+            LocalDateTime expiresAt = null;
+            if (expireTimeString != null && !expireTimeString.isEmpty()) {
+                // 处理带时区的ISO日期时间字符串
+                if (expireTimeString.endsWith("Z")) {
+                    // 移除末尾的Z并转换为LocalDateTime
+                    expireTimeString = expireTimeString.substring(0, expireTimeString.length() - 1);
+                    expiresAt = LocalDateTime.parse(expireTimeString);
+                } else {
+                    expiresAt = LocalDateTime.parse(expireTimeString);
+                }
+            }
+            
+            log.info("管理员设置短链接过期时间: id={}, expiresAt={}", id, expiresAt);
+            LogUtil.logBusiness(operation, String.format(
+                "管理员设置短链接过期时间，ID=%d, 过期时间=%s, 管理员=%s", 
+                id, expiresAt, adminUsername));
+            
+            ShortUrl shortUrl = shortUrlRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("短链接不存在"));
+            
+            shortUrl.setExpiresAt(expiresAt);
+            shortUrl.setUpdatedAt(LocalDateTime.now());
+            ShortUrl updated = shortUrlRepository.save(shortUrl);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("设置过期时间成功: id={}, 耗时：{}ms", id, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "设置成功，ID=%d, 过期时间=%s, 管理员=%s, 耗时=%dms", 
+                id, expiresAt, adminUsername, duration));
+            
+            return ResponseEntity.ok(ApiResponse.success(convertToResponse(updated)));
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("设置过期时间失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "设置失败，ID=%d, 耗时=%dms", id, duration), e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.badRequest("设置过期时间失败: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * 清理过期链接
+     */
+    @PostMapping("/cleanup-expired")
+    @Operation(
+            summary = "清理过期链接",
+            description = "管理员一键清理所有已过期的链接\n\n**权限要求**：ROLE_ADMIN"
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "清理成功")
+    public ResponseEntity<ApiResponse<Object>> cleanupExpiredUrls() {
+        long startTime = System.currentTimeMillis();
+        String operation = "ADMIN_CLEANUP_EXPIRED_URLS";
+        
+        try {
+            LogUtil.setOperation(operation);
+            
+            // 获取当前管理员信息
+            String adminUsername = getAuthenticatedUsername();
+            LogUtil.setUserContext(null, adminUsername);
+            
+            log.info("管理员执行过期链接清理");
+            LogUtil.logBusiness(operation, String.format("管理员执行过期链接清理，管理员=%s", adminUsername));
+            
+            List<ShortUrl> expiredUrls = shortUrlRepository.findByExpiresAtBeforeAndStatus(
+                LocalDateTime.now(), ShortUrlStatus.ENABLED);
+            
+            int deletedCount = expiredUrls.size();
+            if (deletedCount > 0) {
+                List<Long> expiredIds = expiredUrls.stream()
+                    .map(ShortUrl::getId)
+                    .toList();
+                shortUrlRepository.deleteAllById(expiredIds);
+            }
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("过期链接清理完成，共清理 {} 条记录，耗时：{}ms", deletedCount, duration);
+            LogUtil.logBusinessSuccess(operation, String.format(
+                "清理完成，清理数量=%d, 管理员=%s, 耗时=%dms", 
+                deletedCount, adminUsername, duration));
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("deletedCount", deletedCount);
+            result.put("message", "成功清理 " + deletedCount + " 条过期链接");
+            
+            return ResponseEntity.ok(ApiResponse.success(result));
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("清理过期链接失败，耗时：{}ms", duration, e);
+            LogUtil.logBusinessFailure(operation, String.format(
+                "清理失败，耗时=%dms", duration), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("清理过期链接失败: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * 获取当前认证用户的用户名
+     */
+    private String getAuthenticatedUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated() 
+                && !(authentication.getPrincipal() instanceof String)) {
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+            return userDetails.getUsername();
+        }
+        return "anonymous";
     }
 }

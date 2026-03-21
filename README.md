@@ -45,6 +45,42 @@
 - Docker & Docker Compose (推荐)
 - MySQL 8.0+ (可选，可用Docker)
 
+### 数据库配置
+
+项目默认使用以下数据库配置：
+
+```yaml
+# 数据库连接信息
+数据库名: short_url_db
+用户名: short_url_db  
+密码: 123456
+主机: localhost
+端口: 3306
+```
+
+#### 初始化数据库
+
+1. **使用SQL脚本初始化**：
+```bash
+# 执行数据库初始化脚本
+mysql -u root -p < infrastructure/database/init-database.sql
+```
+
+2. **手动创建数据库和用户**：
+```sql
+-- 创建数据库
+CREATE DATABASE short_url_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建用户
+CREATE USER 'short_url_db'@'localhost' IDENTIFIED BY '123456';
+CREATE USER 'short_url_db'@'%' IDENTIFIED BY '123456';
+
+-- 授权
+GRANT ALL PRIVILEGES ON short_url_db.* TO 'short_url_db'@'localhost';
+GRANT ALL PRIVILEGES ON short_url_db.* TO 'short_url_db'@'%';
+FLUSH PRIVILEGES;
+```
+
 ### 一键启动 (推荐)
 
 ```bash
@@ -192,34 +228,71 @@ POST /api/short-url
 - **日志**: ELK Stack (可选)
 - **部署**: CI/CD ready
 
-## 📁 项目结构
+## 📁 项目结构（按功能域分类）
 
 ```
 ShortURLPro/
-├── src/main/java/com/example/shorturlpro/    # 后端源码
-│   ├── controller/                           # 控制器层
-│   ├── service/                              # 服务层
-│   ├── entity/                               # 实体类
-│   ├── repository/                           # 数据访问层
-│   ├── config/                               # 配置类
-│   └── util/                                 # 工具类
-├── src/main/resources/                       # 资源文件
-│   ├── application.properties                # 应用配置
-│   └── static/                               # 静态资源
-├── ShortURLPro/vue/                          # 前端项目
+├── 📁 src/                                   # 核心源代码
+│   └── main/
+│       ├── java/com/example/shorturlpro/     # 后端Java代码
+│       │   ├── controller/                   # 控制器层
+│       │   ├── service/                      # 服务层
+│       │   ├── entity/                       # 实体类
+│       │   ├── repository/                   # 数据访问层
+│       │   ├── config/                       # 配置类
+│       │   └── util/                         # 工具类
+│       └── resources/                        # 配置资源文件
+│
+├── 📁 vue/                                   # 前端项目
 │   ├── src/                                  # Vue源码
 │   │   ├── views/                            # 页面组件
 │   │   ├── api/                              # API接口
 │   │   ├── stores/                           # 状态管理
 │   │   └── router/                           # 路由配置
-│   └── package.json                          # 前端依赖
-├── monitoring/                               # 监控配置
-│   ├── prometheus/                           # Prometheus配置
-│   ├── grafana/                              # Grafana仪表板
-│   └── docker-compose.monitoring.yml         # 监控服务编排
-├── docker-compose.yml                        # 主服务编排
+│   └── package.json                          # 前端依赖配置
+│
+├── 📁 deployment/                            # 部署相关文件
+│   ├── docker/                               # Docker配置
+│   │   ├── docker-compose.dev.yml            # 开发环境编排
+│   │   └── docker-compose.nginx.yml          # 生产环境编排
+│   ├── nginx/                                # Nginx配置
+│   │   ├── conf.d/                           # 站点配置
+│   │   ├── ssl/                              # SSL证书
+│   │   └── nginx.conf                        # 主配置文件
+│   └── scripts/                              # 部署脚本
+│       ├── deploy-bt.bat                     # 宝塔面板部署
+│       └── deploy-nginx.bat                  # Nginx部署
+│
+├── 📁 docs/                                  # 文档资料
+│   ├── guides/                               # 使用指南
+│   │   ├── CONFIGURATION_GUIDE.md            # 配置指南
+│   │   └── STARTUP_INSTRUCTIONS.md           # 启动说明
+│   ├── references/                           # 技术参考
+│   │   └── TECH_STACK_DOCUMENTATION.md       # 技术栈文档
+│   ├── deployment/                           # 部署文档
+│   │   ├── BT_PANEL_DEPLOYMENT.md            # 宝塔面板部署
+│   │   ├── DOCKER_DEPLOYMENT_GUIDE.md        # Docker部署
+│   │   ├── NGINX_DEPLOYMENT_GUIDE.md         # Nginx部署
+│   │   └── DEPLOYMENT_GUIDE.md               # 通用部署指南
+│   └── README.md                             # 项目主文档
+│
+├── 📁 infrastructure/                        # 基础设施
+│   ├── database/                             # 数据库相关
+│   │   └── init-bt.sql                       # 初始化脚本
+│   ├── cli/                                  # 命令行工具
+│   │   ├── skills_store_cli.py               # 技能管理工具
+│   │   └── install.sh                        # 安装脚本
+│   └── monitoring/                           # 监控配置（预留）
+│
+├── 📁 tools/                                 # 开发工具
+│   └── scripts/                              # 辅助脚本
+│
+├── 📁 config/                                # 配置模板
+│   └── application-bt.yml                    # 宝塔面板配置模板
+│
 ├── pom.xml                                   # Maven配置
-└── README.md                                 # 项目文档
+├── openapi.json                              # API文档
+└── openapi.yaml                              # API规范
 ```
 
 ## ⚙️ 配置说明
