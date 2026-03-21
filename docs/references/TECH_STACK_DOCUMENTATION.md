@@ -7,6 +7,8 @@
 | 核心框架 | Spring Boot | 3.3.5 | 应用程序核心框架 |
 | 编程语言 | Java | 21 | 主要开发语言 |
 | 构建工具 | Maven | 4.0.0 | 项目构建和依赖管理 |
+| ORM 框架 | MyBatis-Plus | 3.5.5 | 数据持久化增强 |
+| 前端框架 | Vue.js | 3.5.12 | 前端 UI 框架 |
 
 ---
 
@@ -38,11 +40,21 @@
 ## 🗄️ 数据访问层
 
 ### Spring Data JPA + Hibernate
-**配置文件**: `pom.xml` (第46-50行)
+**配置文件**: `pom.xml` (第 46-50 行)
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
+```
+
+### MyBatis-Plus 3.5.5
+**配置文件**: `pom.xml` (第 173-178 行)
+```xml
+<dependency>
+    <groupId>com.baomidou</groupId>
+    <artifactId>mybatis-plus-boot-starter</artifactId>
+    <version>3.5.5</version>
 </dependency>
 ```
 
@@ -56,10 +68,12 @@
 - `src/main/java/com/example/shorturlpro/repository/ShortUrlRepository.java`
 
 **作用**:
-- 对象关系映射(ORM)
-- 自动生成CRUD操作
+- 对象关系映射 (ORM)
+- 自动生成 CRUD 操作
 - 连接池管理
 - 事务管理
+- 灵活的 SQL 查询支持
+- 代码生成器支持
 
 ### MySQL 数据库
 **配置文件**: `pom.xml` (第52-57行)
@@ -102,6 +116,68 @@ spring:
 
 ---
 
+## ⚡ 异步处理系统
+
+### 异步任务线程池
+**配置类**: `src/main/java/com/example/shorturlpro/config/AsyncConfig.java`
+
+**通用线程池** (`taskExecutor`):
+```java
+@Bean(name = "taskExecutor")
+public Executor taskExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(Runtime.getRuntime().availableProcessors());
+    executor.setMaxPoolSize(Runtime.getRuntime().availableProcessors() * 2);
+    executor.setQueueCapacity(100);
+    executor.setThreadNamePrefix("async-executor-");
+    executor.setKeepAliveSeconds(60);
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(60);
+    executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+    return executor;
+}
+```
+
+**点击统计专用线程池** (`clickStatsExecutor`):
+- 核心线程数：2
+- 最大线程数：5
+- 队列容量：500
+- 拒绝策略：DiscardPolicy (丢弃任务)
+
+**作用**:
+- 异步任务处理
+- 并发性能优化
+- 内存占用控制
+- 避免 OOM 风险
+- 主流程保护
+
+---
+
+## 📝 日志拦截系统
+
+### 请求日志拦截器
+**拦截器类**: `src/main/java/com/example/shorturlpro/interceptor/RequestLoggingInterceptor.java`
+
+**实现接口**: `HandlerInterceptor`
+
+**核心方法**:
+- `preHandle()`: 记录请求开始时间，初始化请求上下文
+- `afterCompletion()`: 计算请求耗时，记录访问日志
+
+**日志格式**:
+```
+{HTTP_METHOD} {URI} -> {STATUS_CODE} (耗时：{DURATION}ms)
+```
+
+**作用**:
+- HTTP 请求访问日志记录
+- 请求耗时统计
+- 响应状态码追踪
+- 异常请求记录
+- 请求链路追踪
+
+---
+
 ## 🔐 安全认证层
 
 ### Spring Security 6.x
@@ -140,10 +216,15 @@ spring:
 </dependency>
 ```
 
-**JWT工具类**: `src/main/java/com/example/shorturlpro/util/JwtUtil.java`
+**JWT 工具类**: `src/main/java/com/example/shorturlpro/util/JwtUtil.java`
 - JWT生成和验证
 - Token过期时间管理
 - 用户信息编码解码
+
+**JJWT 依赖组成**:
+- `jjwt-api` (0.11.5): API 接口层
+- `jjwt-impl` (0.11.5): 运行时实现层
+- `jjwt-jackson` (0.11.5): JSON 序列化支持
 
 **作用**:
 - 无状态身份验证
@@ -157,7 +238,7 @@ spring:
 ### 多级缓存架构
 
 #### 一级缓存 - Caffeine (本地缓存)
-**配置文件**: `pom.xml` (第108-112行)
+**配置文件**: `pom.xml` (第 108-112 行)
 ```xml
 <dependency>
     <groupId>com.github.ben-manes.caffeine</groupId>
@@ -171,7 +252,7 @@ spring:
 - 定义缓存键值对
 
 #### 二级缓存 - Redis (分布式缓存)
-**配置文件**: `pom.xml` (第96-100行)
+**配置文件**: `pom.xml` (第 96-100 行)
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -179,15 +260,23 @@ spring:
 </dependency>
 ```
 
-**Redis配置**: `src/main/java/com/example/shorturlpro/config/RedisConfig.java`
+**Redis 配置**: `src/main/java/com/example/shorturlpro/config/RedisConfig.java`
 - Redis连接配置
 - 序列化器设置
 - 连接池参数
 
 **缓存管理服务**: `src/main/java/com/example/shorturlpro/service/CacheManagementService.java`
-- 缓存预热机制
+
+**缓存类型**:
+- `shortUrl`: 短链接缓存
+- `shortUrlDetail`: 短链接详情缓存
+- `statistics`: 统计数据缓存
+
+**核心功能**:
+- 缓存预热机制 (`@PostConstruct`)
 - 缓存监控和统计
 - 缓存失效策略
+- 异步缓存操作 (`CompletableFuture`)
 
 **作用**:
 - 减少数据库访问压力
@@ -200,7 +289,7 @@ spring:
 ## 📊 监控运维层
 
 ### Spring Boot Actuator
-**配置文件**: `pom.xml` (第114-118行)
+**配置文件**: `pom.xml` (第 114-118 行)
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -208,23 +297,32 @@ spring:
 </dependency>
 ```
 
-**监控配置**: `src/main/resources/application.yml` (第58-86行)
+**监控配置**: `src/main/resources/application.yml` (第 58-86 行)
 ```yaml
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus,logfile,caches
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 ```
 
-**作用**:
-- 应用健康检查
-- 性能指标收集
-- 运行状态监控
-- 日志文件访问
+**暴露的端点**:
+- `/actuator/health`: 应用健康检查
+- `/actuator/info`: 应用信息
+- `/actuator/metrics`: 性能指标
+- `/actuator/prometheus`: Prometheus 格式指标
+- `/actuator/logfile`: 日志文件访问
+- `/actuator/caches`: 缓存管理
 
 ### Micrometer + Prometheus
-**配置文件**: `pom.xml` (第120-128行)
+**配置文件**: `pom.xml` (第 120-128 行)
 ```xml
 <dependency>
     <groupId>io.micrometer</groupId>
@@ -237,31 +335,204 @@ management:
 ```
 
 **监控配置类**: `src/main/java/com/example/shorturlpro/config/MetricsConfig.java`
-- 自定义指标注册
-- 监控维度定义
-- 指标聚合配置
+
+**自定义指标**:
+- `SHORT_URL_GENERATE_COUNT`: 短链接生成计数器
+- `SHORT_URL_REDIRECT_COUNT`: 短链接跳转计数器
+- `SHORT_URL_REDIRECT_TIME`: 跳转耗时计时器
+- `CACHE_HIT_RATE`: 缓存命中率仪表
+- `DATABASE_QUERY_TIME`: 数据库查询耗时
 
 **作用**:
 - 应用性能监控
 - 指标数据收集
-- Prometheus格式输出
+- Prometheus 格式输出
 - 可视化监控集成
+- 自定义业务指标
+
+---
+
+## 📝 日志系统
+
+### Logback 日志框架
+**配置文件**: `pom.xml` (第 153-157 行)
+```xml
+<dependency>
+    <groupId>ch.qos.logback</groupId>
+    <artifactId>logback-classic</artifactId>
+</dependency>
+```
+
+**日志配置**: `src/main/resources/logback-spring.xml`
+
+**控制台日志格式**:
+```
+%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} [%X{requestId}] - %msg%n
+```
+
+**特性**:
+- 结构化日志输出
+- 请求 ID 追踪 (`%X{requestId}`)
+- 多环境日志配置
+- 异步日志支持
+- 日志级别动态调整
+
+**作用**:
+- 应用日志记录
+- 调试信息输出
+- 审计日志追踪
+- 性能分析支持
+
+---
+
+## 🖥️ 前端技术栈
+
+### Vue.js 3.5.12
+**配置文件**: `vue/package.json`
+```json
+{
+  "name": "shorturl-pro-frontend",
+  "version": "0.0.0",
+  "type": "module"
+}
+```
+
+### 核心依赖
+- **Vue Router 4.4.5**: 前端路由管理
+- **Pinia 2.2.6**: 状态管理
+- **Axios 1.7.7**: HTTP 请求库
+- **VueUse 11.2.0**: Composition API 工具集
+
+### 构建工具链
+- **Vite 5.4.10**: 快速构建工具
+- **TypeScript 5.6.0**: 类型系统
+- **Vue TSC 2.1.10**: TypeScript 编译
+
+### UI 样式
+- **Tailwind CSS 3.4.14**: 原子化 CSS 框架
+- **@tailwindcss/forms 0.5.9**: 表单插件
+- **@tailwindcss/typography 0.5.15**: 排版插件
+- **PostCSS 8.4.47**: CSS 预处理
+- **Autoprefixer 10.4.20**: CSS 前缀自动补全
+
+### 代码质量
+- **ESLint 9.13.0**: 代码检查
+- **Prettier 3.3.3**: 代码格式化
+- **eslint-plugin-vue 9.29.0**: Vue ESLint 插件
+- **@typescript-eslint 8.11.0**: TypeScript ESLint
+
+### 测试工具
+- **Vitest 2.1.4**: 单元测试框架
+- **@vitest/coverage-v8 2.1.4**: 测试覆盖率
+
+### 前端目录结构
+```
+vue/src/
+├── api/           # API 接口层
+│   ├── auth.ts    # 认证 API
+│   ├── request.ts # 请求封装
+│   └── shorturl.ts# 短链接 API
+├── components/    # 组件目录
+├── router/        # 路由配置
+│   └── index.ts
+├── stores/        # 状态管理
+│   └── auth.ts    # 认证状态
+├── styles/        # 样式文件
+│   └── tailwind.css
+├── types/         # TypeScript 类型定义
+├── utils/         # 工具函数
+│   └── helpers.ts
+├── views/         # 页面视图
+│   ├── AdminView.vue    # 管理员页面
+│   ├── HomeView.vue     # 首页
+│   └── LoginView.vue    # 登录页
+├── App.vue        # 根组件
+└── main.ts        # 入口文件
+```
+
+---
+
+## 🖥️ 前端技术栈
+
+### Vue.js 3.5.12
+**配置文件**: `vue/package.json`
+```json
+{
+  "name": "shorturl-pro-frontend",
+  "version": "0.0.0",
+  "type": "module"
+}
+```
+
+### 核心依赖
+- **Vue Router 4.4.5**: 前端路由管理
+- **Pinia 2.2.6**: 状态管理
+- **Axios 1.7.7**: HTTP 请求库
+- **VueUse 11.2.0**: Composition API 工具集
+
+### 构建工具链
+- **Vite 5.4.10**: 快速构建工具
+- **TypeScript 5.6.0**: 类型系统
+- **Vue TSC 2.1.10**: TypeScript 编译
+
+### UI 样式
+- **Tailwind CSS 3.4.14**: 原子化 CSS 框架
+- **@tailwindcss/forms 0.5.9**: 表单插件
+- **@tailwindcss/typography 0.5.15**: 排版插件
+- **PostCSS 8.4.47**: CSS 预处理
+- **Autoprefixer 10.4.20**: CSS 前缀自动补全
+
+### 代码质量
+- **ESLint 9.13.0**: 代码检查
+- **Prettier 3.3.3**: 代码格式化
+- **eslint-plugin-vue 9.29.0**: Vue ESLint 插件
+- **@typescript-eslint 8.11.0**: TypeScript ESLint
+
+### 测试工具
+- **Vitest 2.1.4**: 单元测试框架
+- **@vitest/coverage-v8 2.1.4**: 测试覆盖率
+
+### 前端目录结构
+```
+vue/src/
+├── api/           # API 接口层
+│   ├── auth.ts    # 认证 API
+│   ├── request.ts # 请求封装
+│   └── shorturl.ts# 短链接 API
+├── components/    # 组件目录
+├── router/        # 路由配置
+│   └── index.ts
+├── stores/        # 状态管理
+│   └── auth.ts    # 认证状态
+├── styles/        # 样式文件
+│   └── tailwind.css
+├── types/         # TypeScript 类型定义
+├── utils/         # 工具函数
+│   └── helpers.ts
+├── views/         # 页面视图
+│   ├── AdminView.vue    # 管理员页面
+│   ├── HomeView.vue     # 首页
+│   └── LoginView.vue    # 登录页
+├── App.vue        # 根组件
+└── main.ts        # 入口文件
+```
 
 ---
 
 ## 🛠️ 开发工具
 
 ### Lombok
-**配置文件**: `pom.xml` (第138-143行)
+**配置文件**: `pom.xml` (第 138-143 行)
 ```xml
 <dependency>
     <groupId>org.projectlombok</groupId>
     <artifactId>lombok</artifactId>
+    <version>1.18.30</version>
     <optional>true</optional>
 </dependency>
 ```
 
-**编译器配置**: `pom.xml` (第219-225行)
+**编译器配置**: `pom.xml` (第 233-239 行)
 ```xml
 <annotationProcessorPaths>
     <path>
@@ -271,6 +542,13 @@ management:
     </path>
 </annotationProcessorPaths>
 ```
+
+**常用注解**:
+- `@Data`: 自动生成getter/setter/toString/equals/hashCode
+- `@NoArgsConstructor`: 无参构造函数
+- `@AllArgsConstructor`: 全参构造函数
+- `@Slf4j`: 自动注入日志对象
+- `@Component`: Spring 组件标识
 
 **使用示例** (`User.java`):
 ```java
@@ -457,6 +735,27 @@ app:
 - 测试执行
 - 部署包生成
 
+### JSR-250 注解支持
+**配置文件**: `pom.xml` (第 146-151 行)
+```xml
+<dependency>
+    <groupId>javax.annotation</groupId>
+    <artifactId>javax.annotation-api</artifactId>
+    <version>1.3.2</version>
+</dependency>
+```
+
+**常用注解**:
+- `@PostConstruct`: 初始化后执行
+- `@PreDestroy`: 销毁前执行
+- `@Resource`: 资源注入
+- `@Nullable`: 可空标注
+
+**作用**:
+- Java 标准注解支持
+- 生命周期回调
+- 依赖注入标准化
+
 ---
 
 ## 📁 项目结构说明
@@ -498,30 +797,93 @@ src/main/java/com/example/shorturlpro/
 
 ---
 
+## 💾 JSR-250 注解支持
+
+**配置文件**: `pom.xml` (第 146-151 行)
+```xml
+<dependency>
+    <groupId>javax.annotation</groupId>
+    <artifactId>javax.annotation-api</artifactId>
+    <version>1.3.2</version>
+</dependency>
+```
+
+**常用注解**:
+- `@PostConstruct`: 初始化后执行 (用于缓存预热等)
+- `@PreDestroy`: 销毁前执行
+- `@Resource`: 资源注入
+- `@Nullable`: 可空标注
+
+**作用**:
+- Java 标准注解支持
+- 生命周期回调管理
+- 依赖注入标准化
+
+---
+
 ## 🔧 关键特性总结
 
 ### 高性能特点
-- **多级缓存**: 本地+Caffeine+Redis三级缓存
-- **连接池**: HikariCP高性能数据库连接池
-- **异步处理**: Spring异步支持
-- **压缩优化**: Gzip响应压缩
+- **多级缓存**: Caffeine+Redis 二级缓存架构
+- **异步处理**: 双线程池异步任务处理
+- **连接池**: HikariCP 高性能数据库连接池
+- **压缩优化**: Gzip 响应压缩
+- **ORM 增强**: MyBatis-Plus + JPA 双 ORM 支持
 
 ### 安全特性
-- **JWT认证**: 无状态Token认证
+- **JWT 认证**: 无状态 Token 认证
 - **Spring Security**: 完整安全框架
 - **参数校验**: 请求参数自动验证
-- **CSRF防护**: 跨站请求伪造保护
+- **CSRF 防护**: 跨站请求伪造保护
+- **Token 刷新**: JWT Token 自动刷新机制
 
 ### 可维护性
-- **分层架构**: 清晰的MVC分层
+- **分层架构**: 清晰的 MVC 分层
 - **Lombok**: 减少样板代码
 - **统一异常处理**: 全局异常捕获
 - **详细日志**: 结构化日志记录
+- **请求拦截**: 全链路请求日志追踪
+- **JSR-250**: 标准化生命周期管理
 
 ### 可观测性
-- **Actuator**: 应用监控端点
-- **Micrometer**: 指标收集
-- **Prometheus**: 监控集成
+- **Actuator**: 应用监控端点 (health/metrics/caches 等)
+- **Micrometer**: 指标收集框架
+- **Prometheus**: 监控系统集成
 - **健康检查**: 自动化健康检测
+- **自定义指标**: 业务指标埋点
+- **日志追踪**: 请求 ID 全链路追踪
+
+### 前端技术栈
+- **Vue 3**: Composition API
+- **TypeScript**: 完整类型系统
+- **Vite**: 极速构建工具
+- **Tailwind CSS**: 原子化 CSS
+- **Pinia**: 轻量级状态管理
+- **Vue Router**: 前端路由
+- **Axios**: HTTP 客户端
+- **Vitest**: 单元测试框架
 
 这套技术栈为企业级短链接服务提供了完整的技术解决方案，兼顾了性能、安全性、可维护性和可观测性。
+
+---
+
+## 📊 技术选型理由
+
+### 后端选型
+1. **Spring Boot 3.3.5**: 成熟的微服务框架，生态完善
+2. **MyBatis-Plus + JPA**: 灵活性 + 便捷性的平衡
+3. **Caffeine + Redis**: 本地 + 分布式二级缓存架构
+4. **HikariCP**: 业界最快数据库连接池
+5. **JWT**: 无状态认证，适合前后端分离
+
+### 前端选型
+1. **Vue 3 + Vite**: 现代化开发体验，热更新速度快
+2. **TypeScript**: 类型安全，减少运行时错误
+3. **Tailwind CSS**: 原子化 CSS，快速构建 UI
+4. **Pinia**: Vue 官方推荐状态管理，轻量高效
+
+### 运维选型
+1. **Actuator + Prometheus**: 完善的监控体系
+2. **Logback**: 结构化日志，便于 ELK 收集
+3. **Gzip 压缩**: 减少网络传输体积
+4. **Nginx**: 反向代理，负载均衡
